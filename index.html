@@ -4,35 +4,42 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Reben-Bonitur (PWA Demo)</title>
-  <link rel="manifest" href="/manifest.json">
+
   <style>
     body { margin:0; font-family:system-ui, -apple-system,Segoe UI, Roboto, "Helvetica Neue", Arial; }
-    #map { height:50vh; }
-    .toolbar { padding:8px; display:flex; gap:8px; align-items:center; }
+    #map { height:55vh; }
+    .toolbar { padding:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .panel { padding:8px; }
     .point { cursor:pointer; padding:6px; border-bottom:1px solid #eee; }
     input, button, select, textarea { font:inherit; padding:6px; }
-    .photo-thumb { max-width:100px; max-height:80px; }
+    .photo-thumb { max-width:100px; max-height:80px; margin:4px; }
+    .small { font-size:0.9rem; }
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
   <div class="toolbar">
     <button id="btn-set-row">Reihe setzen (2 Punkte)</button>
-    <label>Abstand (m): <input id="input-spacing" type="number" value="1" min="0.1" step="0.1" style="width:70px"></label>
+    <label class="small">Stock-Abstand (m): <input id="input-spacing" type="number" value="1" min="0.1" step="0.1" style="width:70px"></label>
+    <label class="small">Reihenabstand (m): <input id="input-rowspacing" type="number" value="2" min="0.1" step="0.1" style="width:70px"></label>
+    <label class="small">Richtung: 
+      <select id="select-dir"><option value="right">rechts</option><option value="left">links</option><option value="both">beide</option></select>
+    </label>
     <button id="btn-generate">Stöcke generieren</button>
     <button id="btn-export">Export CSV</button>
+    <button id="btn-clear">DB löschen</button>
     <span id="status"></span>
   </div>
+
   <div id="map"></div>
   <div class="panel">
     <h3>Liste (tippe Punkt auf Karte oder hier)</h3>
     <div id="list"></div>
   </div>
 
-  <!-- Detail Modal (simple) -->
+  <!-- Detail Modal -->
   <div id="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); align-items:center; justify-content:center;">
-    <div style="background:#fff; padding:12px; width:92%; max-width:420px; border-radius:8px;">
+    <div style="background:#fff; padding:12px; width:92%; max-width:480px; border-radius:8px;">
       <h3 id="modal-title">Stock</h3>
       <div id="modal-body"></div>
       <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
@@ -42,42 +49,9 @@
     </div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
-// --- Added parallel row generation ---
-function generateParallelRows(start, end, numRows, spacingMeters = 2) {
-  const rows = [];
-  const dx = end.lat - start.lat;
-  const dy = end.lng - start.lng;
-  const len = Math.sqrt(dx*dx + dy*dy);
-  const normX = -dy / len; // perpendicular right vector
-  const normY = dx / len;
-
-  for (let i = 1; i <= numRows; i++) {
-    const offsetLat = normX * (spacingMeters/111320) * i; // approx meters → degrees
-    const offsetLng = normY * (spacingMeters/111320) * i;
-
-    const newStart = { lat: start.lat + offsetLat, lng: start.lng + offsetLng };
-    const newEnd   = { lat: end.lat   + offsetLat, lng: end.lng   + offsetLng };
-
-    rows.push({ start: newStart, end: newEnd });
-  }
-  return rows;
-}
-
-// Hook into existing row placement
-const oldCreateRow = createRow;
-createRow = function(start, end) {
-  oldCreateRow(start, end);
-  const num = prompt("Wieviele zusätzliche parallele Reihen?");
-  const n = parseInt(num);
-  if (!isNaN(n) && n > 0) {
-    const parallel = generateParallelRows(start, end, n);
-    parallel.forEach(r => oldCreateRow(r.start, r.end));
-  }
-};
-</script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // --- Simple IndexedDB wrapper ---
+    // --- IndexedDB Wrapper ---
     const DB_NAME = 'reben-bonitur-v1';
     const STORE = 'stocks';
     function openDB(){
@@ -88,10 +62,11 @@ createRow = function(start, end) {
         r.onerror = e => rej(e.target.error);
       });
     }
-    async function putStock(obj){ const db = await openDB(); const tx = db.transaction(STORE,'readwrite'); tx.objectStore(STORE).put(obj); return tx.complete || new Promise((r,rej)=>{tx.oncomplete=r;tx.onerror=rej}); }
+    async function putStock(obj){ const db = await openDB(); const tx = db.transaction(STORE,'readwrite'); tx.objectStore(STORE).put(obj); return new Promise((r,rej)=>{tx.oncomplete=r;tx.onerror=rej}); }
     async function getAll(){ const db = await openDB(); return new Promise((res,rej)=>{ const tx = db.transaction(STORE,'readonly'); const req = tx.objectStore(STORE).getAll(); req.onsuccess = ()=>res(req.result); req.onerror = ()=>rej(req.error); }); }
+    async function clearAll(){ const db = await openDB(); const tx = db.transaction(STORE,'readwrite'); tx.objectStore(STORE).clear(); return new Promise((r,rej)=>{tx.oncomplete=r;tx.onerror=rej}); }
 
-    // --- Map setup ---
+    // --- Map Setup ---
     const map = L.map('map').setView([48.0, 8.0], 16);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
 
@@ -101,7 +76,15 @@ createRow = function(start, end) {
 
     document.getElementById('btn-set-row').onclick = ()=>{
       tempMarkers.forEach(m=>map.removeLayer(m)); tempMarkers = [];
-      map.once('click', e=>{ const m1 = L.marker(e.latlng).addTo(map); tempMarkers.push(m1); map.once('click', e2=>{ const m2 = L.marker(e2.latlng).addTo(map); tempMarkers.push(m2); const poly = L.polyline([m1.getLatLng(), m2.getLatLng()]).addTo(map); tempMarkers.push(poly); }); });
+      map.once('click', e=>{
+        const m1 = L.marker(e.latlng).addTo(map); tempMarkers.push(m1);
+        map.once('click', e2=>{
+          const m2 = L.marker(e2.latlng).addTo(map); tempMarkers.push(m2);
+          const poly = L.polyline([m1.getLatLng(), m2.getLatLng()]).addTo(map);
+          tempMarkers.push(poly);
+          setStatus('Punkte gesetzt. Jetzt auf "Stöcke generieren" klicken.');
+        });
+      });
       setStatus('Klicke zwei Punkte auf der Karte, um die Reihe zu definieren.');
     };
 
@@ -109,9 +92,9 @@ createRow = function(start, end) {
 
     function toRad(d){ return d*Math.PI/180; }
     function toDeg(d){ return d*180/Math.PI; }
-    // destination point given start lat lon, bearing (deg), distance (m)
+
     function destPoint(lat, lon, bearingDeg, distMeters){
-      const R = 6378137.0; // earth
+      const R = 6378137.0;
       const br = toRad(bearingDeg);
       const lat1 = toRad(lat), lon1 = toRad(lon);
       const dR = distMeters / R;
@@ -120,40 +103,47 @@ createRow = function(start, end) {
       return [toDeg(lat2), toDeg(lon2)];
     }
 
-    function bearingBetween(a,b){ // returns bearing from a to b in degrees
+    function bearingBetween(a,b){
       const lat1 = toRad(a.lat), lat2 = toRad(b.lat); const dLon = toRad(b.lng-a.lng);
-      const y = Math.sin(dLon)*Math.cos(lat2); const x = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon);
+      const y = Math.sin(dLon)*Math.cos(lat2);
+      const x = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon);
       return (toDeg(Math.atan2(y,x))+360)%360;
     }
 
+    // --- Utility: offset point perpendicular by meters (approx) ---
+    function offsetPoint(lat, lng, bearingDeg, offsetMeters){
+      // Move perpendicular (bearing+90) by offsetMeters
+      const perp = (bearingDeg + 90) % 360;
+      return destPoint(lat, lng, perp, offsetMeters);
+    }
+
+    // --- Generate stocks for base row + parallels ---
     document.getElementById('btn-generate').onclick = async ()=>{
       const pts = tempMarkers.filter(p=>p instanceof L.Marker).map(m=>m.getLatLng());
       if(pts.length<2){ setStatus('Bitte zuerst zwei Punkte setzen.'); return; }
 
       const baseStart = pts[0];
       const baseEnd   = pts[1];
-
-      const numRows = parseInt(prompt("Wieviele parallele Reihen zusätzlich? (0 = nur diese)")||0);
       const spacing = parseFloat(document.getElementById('input-spacing').value) || 1;
+      const rowSpacing = parseFloat(document.getElementById('input-rowspacing').value) || 2;
+      const dir = document.getElementById('select-dir').value; // right,left,both
+      const numExtra = parseInt(prompt('Wieviele zusätzliche parallele Reihen? (0 = nur diese)')||0);
 
       const allRows = [];
-      allRows.push({start:baseStart, end:baseEnd});
+      allRows.push({start:baseStart, end:baseEnd, label:1});
 
-      // generate parallels
-      const dx = baseEnd.lat - baseStart.lat;
-      const dy = baseEnd.lng - baseStart.lng;
-      const len = Math.sqrt(dx*dx + dy*dy);
-      const normX = -dy / len;
-      const normY =  dx / len;
-      const rowSpacing = 2; // meters
+      const bearingBase = bearingBetween(baseStart, baseEnd);
 
-      for (let i = 1; i <= numRows; i++){
-        const offLat = normX * (rowSpacing/111320) * i;
-        const offLng = normY * (rowSpacing/111320) * i;
-        allRows.push({
-          start:{lat:baseStart.lat+offLat, lng:baseStart.lng+offLng},
-          end:{lat:baseEnd.lat+offLat,   lng:baseEnd.lng+offLng}
-        });
+      function pushOffset(i, side){ // side = +1 right, -1 left
+        const off = rowSpacing * i * side;
+        const p1 = offsetPoint(baseStart.lat, baseStart.lng, bearingBase, off);
+        const p2 = offsetPoint(baseEnd.lat, baseEnd.lng, bearingBase, off);
+        allRows.push({start:{lat:p1[0], lng:p1[1]}, end:{lat:p2[0], lng:p2[1]}, label: allRows.length+1});
+      }
+
+      for(let i=1;i<=numExtra;i++){
+        if(dir==='right' || dir==='both') pushOffset(i, +1);
+        if(dir==='left'  || dir==='both') pushOffset(i, -1);
       }
 
       generatedPoints = [];
@@ -163,68 +153,66 @@ createRow = function(start, end) {
         const row = allRows[rIndex];
         const b = bearingBetween(row.start, row.end);
         const distTotal = map.distance(row.start, row.end);
-        const count = Math.round(distTotal/spacing) + 1;
+        const count = Math.max(1, Math.round(distTotal/spacing) + 1);
 
         for(let i=0;i<count;i++){
           const d = i*spacing;
           const [lat,lon] = destPoint(row.start.lat, row.start.lng, b, d);
-          const id = `R${rIndex+1}-S${i}`;
+          const id = `R${rIndex+1}-S${i+1}`;
           const marker = L.circleMarker([lat,lon], {radius:6, color:'#2a9d8f'}).addTo(markersLayer);
-          marker.__meta = {id, index:i, row:rIndex+1, lat, lon};
+          marker.__meta = {id, index:i+1, row:rIndex+1, lat, lon};
           marker.on('click', ()=> openDetail(marker.__meta));
-          generatedPoints.pu('Bitte zuerst zwei Punkte setzen.'); return; }
-      const spacing = parseFloat(document.getElementById('input-spacing').value) || 1;
-      const b = bearingBetween(pts[0], pts[1]);
-      const distTotal = map.distance(pts[0], pts[1]);
-      const count = Math.round(distTotal/spacing) + 1;
-      generatedPoints = [];
-      markersLayer.clearLayers();
-      for(let i=0;i<count;i++){
-        const d = i*spacing;
-        const [lat, lon] = destPoint(pts[0].lat, pts[0].lng, b, d);
-        const id = `R-${Date.now()}-${i}`;
-        const marker = L.circleMarker([lat,lon], {radius:6, color:'#2a9d8f'}).addTo(markersLayer);
-        marker.__meta = {id, index:i, lat, lon};
-        marker.on('click', ()=> openDetail(marker.__meta));
-        generatedPoints.push(marker.__meta);
+          generatedPoints.push(marker.__meta);
+        }
       }
+
       await saveInitial(generatedPoints);
       refreshList();
-      setStatus(`Generiert ${generatedPoints.length} Stöcke.`);
+      setStatus(`Generiert ${generatedPoints.length} Stöcke in ${allRows.length} Reihen.`);
     };
 
     async function saveInitial(points){
       for(const p of points){
-        const obj = { id: p.id, index: p.index, lat: p.lat, lon: p.lon, notes:[], created: new Date().toISOString() };
+        const obj = { id: p.id, index: p.index, row: p.row, lat: p.lat, lon: p.lon, photos: [], last: null, created: new Date().toISOString() };
         await putStock(obj);
       }
     }
 
-    async function refreshList(){ const all = await getAll(); const list = document.getElementById('list'); list.innerHTML=''; all.sort((a,b)=>a.index-b.index); for(const s of all){ const el = document.createElement('div'); el.className='point'; el.textContent = `${s.id} — ${s.index}`; el.onclick = ()=> openDetail(s); list.appendChild(el); } }
+    async function refreshList(){
+      const all = await getAll();
+      const list = document.getElementById('list'); list.innerHTML='';
+      all.sort((a,b)=>{
+        if(a.row !== b.row) return a.row - b.row;
+        return a.index - b.index;
+      });
+      for(const s of all){ const el = document.createElement('div'); el.className='point'; el.textContent = `${s.id} — R${s.row} S${s.index}`; el.onclick = ()=> openDetail(s); list.appendChild(el); }
+    }
 
     // modal / detail
     function openDetail(meta){
       (async ()=>{
         let record;
-        if(meta.id){ // meta could be object from list or marker
-          const dball = await getAll(); record = dball.find(x=>x.id===meta.id) || meta;
-        } else record = meta;
+        const all = await getAll();
+        record = all.find(x=>x.id===meta.id) || meta;
         const title = document.getElementById('modal-title'); title.textContent = record.id || 'Stock';
-        const body = document.getElementById('modal-body'); body.innerHTML = `
-          <div>Index: ${record.index ?? ''}</div>
-          <div>Lat: ${record.lat?.toFixed(6)} Lon: ${record.lon?.toFixed(6)}</div>
+        const body = document.getElementById('modal-body');
+        body.innerHTML = `
+          <div>Row: ${record.row ?? ''} — Index: ${record.index ?? ''}</div>
+          <div>Lat: ${record.lat?.toFixed(6) ?? ''} Lon: ${record.lon?.toFixed(6) ?? ''}</div>
           <label>Wuchs (1-5): <input id="f-wuchs" type="number" min="1" max="5" value="${(record.last||{}).wuchs||''}"></label><br>
           <label>Gesundheit (1-5): <input id="f-gesund" type="number" min="1" max="5" value="${(record.last||{}).gesund||''}"></label><br>
+          <label>Reife (1-5): <input id="f-reife" type="number" min="1" max="5" value="${(record.last||{}).reife||''}"></label><br>
           <label>Kommentar:<br><textarea id="f-komm">${(record.last||{}).kom || ''}</textarea></label><br>
           <label>Foto: <input id="f-photo" type="file" accept="image/*" capture="environment"></label>
           <div id="thumbs"></div>
         `;
-        // show existing images
         if(record.photos) for(const p of record.photos){ const img = document.createElement('img'); img.src = p; img.className='photo-thumb'; document.getElementById('thumbs').appendChild(img); }
         document.getElementById('modal').style.display='flex';
+
         document.getElementById('btn-save').onclick = async ()=>{
           const w = parseInt(document.getElementById('f-wuchs').value||0);
           const g = parseInt(document.getElementById('f-gesund').value||0);
+          const r = parseInt(document.getElementById('f-reife').value||0);
           const k = document.getElementById('f-komm').value||'';
           const fileIn = document.getElementById('f-photo');
           if(fileIn.files && fileIn.files[0]){
@@ -233,7 +221,7 @@ createRow = function(start, end) {
             record.photos = record.photos || [];
             record.photos.push(b64);
           }
-          record.last = { wuchs:w, gesund:g, kom:k, at: new Date().toISOString() };
+          record.last = { wuchs:w, gesund:g, reife:r, kom:k, at: new Date().toISOString() };
           await putStock(record);
           document.getElementById('modal').style.display='none';
           refreshList();
@@ -246,13 +234,24 @@ createRow = function(start, end) {
 
     document.getElementById('btn-export').onclick = async ()=>{
       const all = await getAll();
-      const rows = [ ['id','index','lat','lon','last_wuchs','last_gesund','last_kommentar','photo_count','created'] ];
-      for(const s of all){ rows.push([s.id,s.index,s.lat,s.lon,(s.last?.wuchs||''),(s.last?.gesund||''), (s.last?.kom||''), (s.photos?.length||0), s.created]); }
-      const csv = rows.map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""') }"`).join(',')).join('\n');
+      const rows = [ ['id','row','index','lat','lon','last_wuchs','last_gesund','last_reife','last_kommentar','photo_count','created'] ];
+      for(const s of all){ rows.push([s.id,s.row,s.index,s.lat,s.lon,(s.last?.wuchs||''),(s.last?.gesund||''),(s.last?.reife||''),(s.last?.kom||''),(s.photos?.length||0), s.created]); }
+      const csv = rows.map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""') }"`).join(',')).join('
+');
       const blob = new Blob([csv],{type:'text/csv'});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = 'reben_bonitur.csv'; a.click(); URL.revokeObjectURL(url);
       setStatus('CSV exportiert');
+    };
+
+    document.getElementById('btn-clear').onclick = async ()=>{
+      if(!confirm('Alle lokal gespeicherten Daten löschen?')) return;
+      await clearAll();
+      markersLayer.clearLayers();
+      tempMarkers.forEach(m=>map.removeLayer(m)); tempMarkers = [];
+      generatedPoints = [];
+      refreshList();
+      setStatus('Daten gelöscht');
     };
 
     // initial refresh
