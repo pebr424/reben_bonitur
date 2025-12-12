@@ -236,7 +236,7 @@
       const all = await getAll();
       const rows = [ ['id','row','index','lat','lon','last_wuchs','last_gesund','last_reife','last_kommentar','photo_count','created'] ];
       for(const s of all){ rows.push([s.id,s.row,s.index,s.lat,s.lon,(s.last?.wuchs||''),(s.last?.gesund||''),(s.last?.reife||''),(s.last?.kom||''),(s.photos?.length||0), s.created]); }
-      const csv = rows.map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+      const csv = rows.map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(';')).join('\n');
       const blob = new Blob([csv],{type:'text/csv'});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = 'reben_bonitur.csv'; a.click(); URL.revokeObjectURL(url);
