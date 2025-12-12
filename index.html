@@ -127,9 +127,52 @@ createRow = function(start, end) {
     }
 
     document.getElementById('btn-generate').onclick = async ()=>{
-      // read two points
       const pts = tempMarkers.filter(p=>p instanceof L.Marker).map(m=>m.getLatLng());
       if(pts.length<2){ setStatus('Bitte zuerst zwei Punkte setzen.'); return; }
+
+      const baseStart = pts[0];
+      const baseEnd   = pts[1];
+
+      const numRows = parseInt(prompt("Wieviele parallele Reihen zusätzlich? (0 = nur diese)")||0);
+      const spacing = parseFloat(document.getElementById('input-spacing').value) || 1;
+
+      const allRows = [];
+      allRows.push({start:baseStart, end:baseEnd});
+
+      // generate parallels
+      const dx = baseEnd.lat - baseStart.lat;
+      const dy = baseEnd.lng - baseStart.lng;
+      const len = Math.sqrt(dx*dx + dy*dy);
+      const normX = -dy / len;
+      const normY =  dx / len;
+      const rowSpacing = 2; // meters
+
+      for (let i = 1; i <= numRows; i++){
+        const offLat = normX * (rowSpacing/111320) * i;
+        const offLng = normY * (rowSpacing/111320) * i;
+        allRows.push({
+          start:{lat:baseStart.lat+offLat, lng:baseStart.lng+offLng},
+          end:{lat:baseEnd.lat+offLat,   lng:baseEnd.lng+offLng}
+        });
+      }
+
+      generatedPoints = [];
+      markersLayer.clearLayers();
+
+      for (let rIndex = 0; rIndex < allRows.length; rIndex++){
+        const row = allRows[rIndex];
+        const b = bearingBetween(row.start, row.end);
+        const distTotal = map.distance(row.start, row.end);
+        const count = Math.round(distTotal/spacing) + 1;
+
+        for(let i=0;i<count;i++){
+          const d = i*spacing;
+          const [lat,lon] = destPoint(row.start.lat, row.start.lng, b, d);
+          const id = `R${rIndex+1}-S${i}`;
+          const marker = L.circleMarker([lat,lon], {radius:6, color:'#2a9d8f'}).addTo(markersLayer);
+          marker.__meta = {id, index:i, row:rIndex+1, lat, lon};
+          marker.on('click', ()=> openDetail(marker.__meta));
+          generatedPoints.pu('Bitte zuerst zwei Punkte setzen.'); return; }
       const spacing = parseFloat(document.getElementById('input-spacing').value) || 1;
       const b = bearingBetween(pts[0], pts[1]);
       const distTotal = map.distance(pts[0], pts[1]);
