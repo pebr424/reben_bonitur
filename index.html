@@ -42,7 +42,40 @@
     </div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+// --- Added parallel row generation ---
+function generateParallelRows(start, end, numRows, spacingMeters = 2) {
+  const rows = [];
+  const dx = end.lat - start.lat;
+  const dy = end.lng - start.lng;
+  const len = Math.sqrt(dx*dx + dy*dy);
+  const normX = -dy / len; // perpendicular right vector
+  const normY = dx / len;
+
+  for (let i = 1; i <= numRows; i++) {
+    const offsetLat = normX * (spacingMeters/111320) * i; // approx meters → degrees
+    const offsetLng = normY * (spacingMeters/111320) * i;
+
+    const newStart = { lat: start.lat + offsetLat, lng: start.lng + offsetLng };
+    const newEnd   = { lat: end.lat   + offsetLat, lng: end.lng   + offsetLng };
+
+    rows.push({ start: newStart, end: newEnd });
+  }
+  return rows;
+}
+
+// Hook into existing row placement
+const oldCreateRow = createRow;
+createRow = function(start, end) {
+  oldCreateRow(start, end);
+  const num = prompt("Wieviele zusätzliche parallele Reihen?");
+  const n = parseInt(num);
+  if (!isNaN(n) && n > 0) {
+    const parallel = generateParallelRows(start, end, n);
+    parallel.forEach(r => oldCreateRow(r.start, r.end));
+  }
+};
+</script>
   <script>
     // --- Simple IndexedDB wrapper ---
     const DB_NAME = 'reben-bonitur-v1';
