@@ -27,10 +27,11 @@
     </label>
     <button id="btn-generate">Stöcke generieren</button>
     <button id="btn-export">Export CSV</button>
+    <button id="btn-import">Import CSV</button>
     <button id="btn-clear">DB löschen</button>
     <span id="status"></span>
   </div>
-
+  <input id="csv-file" type="file" accept=".csv,text/csv" style="display:none">
   <div id="map"></div>
   <div class="panel">
     <h3>Liste (tippe Punkt auf Karte oder hier)</h3>
@@ -255,7 +256,80 @@
 
     // initial refresh
     refreshList();
+    document.getElementById('btn-import').onclick = ()=>{
+  document.getElementById('csv-file').click();
+};
+document.getElementById('csv-file').addEventListener('change', (ev)=>{
+  const file = ev.target.files[0];
+  if(!file) return;
 
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    const text = reader.result;
+    console.log('CSV geladen, Länge:', text.length);
+    setStatus('CSV-Datei gelesen');
+
+    const lines = text.trim().split('\n');
+    if(lines.length < 2) { setStatus('Keine Daten in CSV'); return; }
+
+    const headers = lines[0].split(';').map(h => h.replace(/"/g,'').trim());
+    const data = [];
+
+    for(let i=1; i<lines.length; i++){
+        if(!lines[i].trim()) continue;
+        const row = lines[i].split(';').map(c=>c.replace(/"/g,'').trim());
+        const obj = {};
+        headers.forEach((h,j)=>obj[h] = row[j]);
+        data.push(obj);
+    }
+
+    console.log('Parsed CSV:', data);
+    setStatus(`CSV geparst: ${data.length} Zeilen`);
+
+    // --- IndexedDB + Map einfügen ---
+    await clearAll();
+    markersLayer.clearLayers();
+    tempMarkers = [];
+    generatedPoints = [];
+
+    for(const s of data){
+        const lat = parseFloat(s.lat.replace(/^'/,'')); // evtl. führendes ' entfernen
+        const lon = parseFloat(s.lon.replace(/^'/,''));
+        const id = s.id || `R${s.row}-S${s.index}`;
+        const stock = {
+            id,
+            row: parseInt(s.row),
+            index: parseInt(s.index),
+            lat,
+            lon,
+            photos: [],
+            last: s.last_wuchs || s.last_gesund || s.last_reife || s.last_kommentar ? {
+                wuchs: parseInt(s.last_wuchs)||0,
+                gesund: parseInt(s.last_gesund)||0,
+                reife: parseInt(s.last_reife)||0,
+                kom: s.last_kommentar||'',
+                at: new Date().toISOString()
+            } : null,
+            created: s.created || new Date().toISOString()
+        };
+
+        await putStock(stock);
+
+        const marker = L.circleMarker([lat, lon], {radius:6, color:'#2a9d8f'}).addTo(markersLayer);
+        marker.__meta = {id: stock.id, row: stock.row, index: stock.index, lat, lon};
+        marker.on('click', ()=> openDetail(marker.__meta));
+        generatedPoints.push(marker.__meta);
+    }
+
+    refreshList();
+    setStatus(`CSV importiert: ${generatedPoints.length} Stöcke`);
+};
+
+  reader.readAsText(file, 'utf-8');
+
+  // wichtig: reset, damit dieselbe Datei nochmal gewählt werden kann
+  ev.target.value = '';
+});
   </script>
 </body>
 </html>
