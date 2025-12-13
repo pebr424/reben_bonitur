@@ -235,7 +235,7 @@
     document.getElementById('btn-export').onclick = async ()=>{
       const all = await getAll();
       const rows = [ ['id','row','index','lat','lon','last_wuchs','last_gesund','last_reife','last_kommentar','photo_count','created'] ];
-      for(const s of all){ rows.push([s.id,s.row,s.index,s.lat,s.lon,(s.last?.wuchs||''),(s.last?.gesund||''),(s.last?.reife||''),(s.last?.kom||''),(s.photos?.length||0), s.created]); }
+      for(const s of all){ rows.push([s.id,s.row,s.index,"'" + (s.lat != null ? s.lat.toFixed(6) : ''),"'" + (s.lon != null ? s.lon.toFixed(6) : ''),(s.last?.wuchs||''),(s.last?.gesund||''),(s.last?.reife||''),(s.last?.kom||''),(s.photos?.length||0), s.created]); }
       const csv = rows.map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(';')).join('\n');
       const blob = new Blob([csv],{type:'text/csv'});
       const url = URL.createObjectURL(blob);
