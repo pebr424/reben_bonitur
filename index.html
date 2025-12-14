@@ -14,6 +14,12 @@
     input, button, select, textarea { font:inherit; padding:6px; }
     .photo-thumb { max-width:100px; max-height:80px; margin:4px; }
     .small { font-size:0.9rem; }
+    .point.highlight {
+    background-color: #ffeb3b !important;
+    border-left: 6px solid #f59e0b;
+    padding-left: 6px;
+    transition: background-color 0.2s ease;
+    }
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
@@ -53,6 +59,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
+    let highlightedId = null;
     // --- IndexedDB Wrapper ---
     const DB_NAME = 'reben-bonitur-v1';
     const STORE = 'stocks';
@@ -168,58 +175,76 @@
     }
 
     // --- Generate stocks for base row + parallels ---
-    document.getElementById('btn-generate').onclick = async ()=>{
-      const pts = tempMarkers.filter(p=>p instanceof L.Marker).map(m=>m.getLatLng());
-      if(pts.length<2){ setStatus('Bitte zuerst zwei Punkte setzen.'); return; }
+    document.getElementById('btn-generate').onclick = async ()=> {
+  const pts = tempMarkers.filter(p=>p instanceof L.Marker).map(m=>m.getLatLng());
+  if(pts.length < 2){
+    setStatus('Bitte zuerst zwei Punkte setzen.');
+    return;
+  }
 
-      const baseStart = pts[0];
-      const baseEnd   = pts[1];
-      const spacing = parseFloat(document.getElementById('input-spacing').value) || 1;
-      const rowSpacing = parseFloat(document.getElementById('input-rowspacing').value) || 2;
-      const dir = document.getElementById('select-dir').value; // right,left,both
-      const numExtra = parseInt(prompt('Wieviele zusätzliche parallele Reihen? (0 = nur diese)')||0);
+  const baseStart = pts[0];
+  const baseEnd   = pts[1];
+  const spacing = parseFloat(document.getElementById('input-spacing').value) || 1;
+  const rowSpacing = parseFloat(document.getElementById('input-rowspacing').value) || 2;
+  const dir = document.getElementById('select-dir').value;
+  const numExtra = parseInt(prompt('Wieviele zusätzliche parallele Reihen? (0 = nur diese)') || 0);
 
-      const allRows = [];
-      allRows.push({start:baseStart, end:baseEnd, label:1});
+  const allRows = [];
+  allRows.push({start:baseStart, end:baseEnd});
 
-      const bearingBase = bearingBetween(baseStart, baseEnd);
+  const bearingBase = bearingBetween(baseStart, baseEnd);
 
-      function pushOffset(i, side){ // side = +1 right, -1 left
-        const off = rowSpacing * i * side;
-        const p1 = offsetPoint(baseStart.lat, baseStart.lng, bearingBase, off);
-        const p2 = offsetPoint(baseEnd.lat, baseEnd.lng, bearingBase, off);
-        allRows.push({start:{lat:p1[0], lng:p1[1]}, end:{lat:p2[0], lng:p2[1]}, label: allRows.length+1});
-      }
+  function pushOffset(i, side){
+    const off = rowSpacing * i * side;
+    const p1 = offsetPoint(baseStart.lat, baseStart.lng, bearingBase, off);
+    const p2 = offsetPoint(baseEnd.lat, baseEnd.lng, bearingBase, off);
+    allRows.push({
+      start:{lat:p1[0], lng:p1[1]},
+      end:{lat:p2[0], lng:p2[1]}
+    });
+  }
 
-      for(let i=1;i<=numExtra;i++){
-        if(dir==='right' || dir==='both') pushOffset(i, +1);
-        if(dir==='left'  || dir==='both') pushOffset(i, -1);
-      }
+  for(let i=1;i<=numExtra;i++){
+    if(dir==='right' || dir==='both') pushOffset(i, +1);
+    if(dir==='left'  || dir==='both') pushOffset(i, -1);
+  }
 
-      generatedPoints = [];
-      markersLayer.clearLayers();
+  generatedPoints = [];
+  markersLayer.clearLayers();
 
-      for (let rIndex = 0; rIndex < allRows.length; rIndex++){
-        const row = allRows[rIndex];
-        const b = bearingBetween(row.start, row.end);
-        const distTotal = map.distance(row.start, row.end);
-        const count = Math.max(1, Math.round(distTotal/spacing) + 1);
+  for(let rIndex=0; rIndex<allRows.length; rIndex++){
+    const row = allRows[rIndex];
+    const b = bearingBetween(row.start, row.end);
+    const distTotal = map.distance(row.start, row.end);
+    const count = Math.max(1, Math.round(distTotal / spacing) + 1);
 
-        for(let i=0;i<count;i++){
-          const d = i*spacing;
-          const [lat,lon] = destPoint(row.start.lat, row.start.lng, b, d);
-          const id = `R${rIndex+1}-S${i+1}`;
-          const marker = L.circleMarker([lat,lon], {radius:6, color:'#2a9d8f'}).addTo(markersLayer);
-          marker.__meta = {id, index:i+1, row:rIndex+1, lat, lon};
-          marker.on('click', ()=> openDetail(marker.__meta));
-          generatedPoints.push(marker.__meta);
-        }
-      }
+    for(let i=0; i<count; i++){
+      const d = i * spacing;
+      const [lat,lon] = destPoint(row.start.lat, row.start.lng, b, d);
+      const id = `R${rIndex+1}-S${i+1}`;
 
-      await saveInitial(generatedPoints);
-      refreshList();
-      setStatus(`Generiert ${generatedPoints.length} Stöcke in ${allRows.length} Reihen.`);
-    };
+      const marker = L.circleMarker([lat,lon], {radius:6}).addTo(markersLayer);
+      marker.__meta = {id, row:rIndex+1, index:i+1, lat, lon};
+
+      marker.on('click', ()=> {
+  highlightedId = marker.__meta.id;
+
+  openDetail(marker.__meta);
+
+  refreshList();   // <-- wichtig
+});
+
+
+
+      generatedPoints.push(marker.__meta);
+    }
+  }
+
+  await saveInitial(generatedPoints);
+  refreshList();
+  setStatus(`Generiert ${generatedPoints.length} Stöcke`);
+};
+
 
     async function saveInitial(points){
       for(const p of points){
@@ -229,14 +254,42 @@
     }
 
     async function refreshList(){
-      const all = await getAll();
-      const list = document.getElementById('list'); list.innerHTML='';
-      all.sort((a,b)=>{
-        if(a.row !== b.row) return a.row - b.row;
-        return a.index - b.index;
-      });
-      for(const s of all){ const el = document.createElement('div'); el.className='point'; el.textContent = `${s.id} — R${s.row} S${s.index}`; el.onclick = ()=> openDetail(s); list.appendChild(el); }
+  const all = await getAll();
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+
+  all.sort((a,b)=>{
+    if(a.row !== b.row) return a.row - b.row;
+    return a.index - b.index;
+  });
+
+  for(const s of all){
+    const el = document.createElement('div');
+    el.id = `list-${s.id}`;
+    el.className = 'point';
+    el.textContent = `${s.id} — R${s.row} S${s.index}`;
+    el.onclick = ()=> openDetail(s);
+
+    // ⭐ HIGHLIGHT HIER (nach Render!)
+    if(s.id === highlightedId){
+      el.classList.add('highlight');
+
+      // Scroll erst NACH DOM-Aufbau
+      setTimeout(()=>{
+        el.scrollIntoView({ behavior:'smooth', block:'center' });
+      }, 30);
+
+      // Highlight später entfernen
+      setTimeout(()=>{
+        el.classList.remove('highlight');
+        highlightedId = null;
+      }, 15000);
     }
+
+    list.appendChild(el);
+  }
+}
+
 
     // modal / detail
     function openDetail(meta){
@@ -282,16 +335,73 @@
 
     function fileToBase64(file){ return new Promise((res,rej)=>{ const r = new FileReader(); r.onload = ()=>res(r.result); r.onerror = e => rej(e); r.readAsDataURL(file); }); }
 
-    document.getElementById('btn-export').onclick = async ()=>{
-      const all = await getAll();
-      const rows = [ ['id','row','index','lat','lon','last_wuchs','last_gesund','last_reife','last_kommentar','photo_count','created'] ];
-      for(const s of all){ rows.push([s.id,s.row,s.index,"'" + (s.lat != null ? s.lat.toFixed(6) : ''),"'" + (s.lon != null ? s.lon.toFixed(6) : ''),(s.last?.wuchs||''),(s.last?.gesund||''),(s.last?.reife||''),(s.last?.kom||''),(s.photos?.length||0), s.created]); }
-      const csv = rows.map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(';')).join('\n');
-      const blob = new Blob([csv],{type:'text/csv'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'reben_bonitur.csv'; a.click(); URL.revokeObjectURL(url);
-      setStatus('CSV exportiert');
-    };
+    document.getElementById('btn-export').onclick = async () => {
+  const all = await getAll();
+
+  // Sortierung wie in Weboberfläche
+  all.sort((a,b) => {
+    if(a.row !== b.row) return a.row - b.row;
+    return a.index - b.index;
+  });
+
+  // Zuerst die maximale Anzahl Begehungen finden
+  let maxBegehung = 0;
+  all.forEach(s => {
+    const count = (s.lasts?.length || 0) + (s.last ? 1 : 0);
+    maxBegehung = Math.max(maxBegehung, count);
+  });
+
+  // Header bauen: id,row,index,lat,lon + für jede Begehung wuchs,gesund,reife,kommentar,created
+  const headers = ['id','row','index','lat','lon'];
+  for(let i=0; i<maxBegehung; i++){
+    const suffix = i===0 ? '' : '_' + i;
+    headers.push(`wuchs${suffix}`, `gesund${suffix}`, `reife${suffix}`, `kommentar${suffix}`, `created${suffix}`);
+  }
+
+  const rows = [headers];
+
+  // Daten einfügen
+  for(const s of all){
+    const row = [
+      s.id,
+      s.row,
+      s.index,
+      s.lat != null ? s.lat.toFixed(6) : '',
+      s.lon != null ? s.lon.toFixed(6) : ''
+    ];
+
+    // Alle Begehungen zusammenführen: zuerst lasts[], dann ggf. aktuelle last
+    const begehungen = [...(s.lasts || [])];
+    if(s.last) begehungen.push(s.last);
+
+    for(let i=0; i<maxBegehung; i++){
+      const b = begehungen[i] || {};
+      row.push(
+        b.wuchs || '',
+        b.gesund || '',
+        b.reife || '',
+        b.kom || '',
+        b.at ? new Date(b.at).toLocaleDateString('de-DE') : ''
+      );
+    }
+
+    rows.push(row);
+  }
+
+  const csv = rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(';')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'reben_bonitur.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('CSV exportiert mit allen Begehungen');
+};
+
+
+// Sortierung wie in der Weboberfläche
+
 
     document.getElementById('btn-clear').onclick = async ()=>{
       if(!confirm('Alle lokal gespeicherten Daten löschen?')) return;
@@ -305,80 +415,125 @@
 
     // initial refresh
     refreshList();
-    document.getElementById('btn-import').onclick = ()=>{
+    document.getElementById('btn-import').onclick = () => {
   document.getElementById('csv-file').click();
 };
-document.getElementById('csv-file').addEventListener('change', (ev)=>{
+
+document.getElementById('csv-file').addEventListener('change', async (ev) => {
   const file = ev.target.files[0];
-  if(!file) return;
+  if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = async ()=>{
+  reader.onload = async () => {
     const text = reader.result;
-    console.log('CSV geladen, Länge:', text.length);
     setStatus('CSV-Datei gelesen');
 
     const lines = text.trim().split('\n');
-    if(lines.length < 2) { setStatus('Keine Daten in CSV'); return; }
+    if (lines.length < 2) { setStatus('Keine Daten in CSV'); return; }
 
+    // Header analysieren
     const headers = lines[0].split(';').map(h => h.replace(/"/g,'').trim());
-    const data = [];
 
-    for(let i=1; i<lines.length; i++){
-        if(!lines[i].trim()) continue;
-        const row = lines[i].split(';').map(c=>c.replace(/"/g,'').trim());
-        const obj = {};
-        headers.forEach((h,j)=>obj[h] = row[j]);
-        data.push(obj);
+    // Anzahl Begehungen über Header ermitteln (wuchs-Spalten)
+    const numBegehungen = headers.filter(h => h.startsWith('wuchs')).length;
+
+    // CSV in Objekte umwandeln
+    const data = [];
+    for (let i = 1; i < lines.length; i++) {
+      if(!lines[i].trim()) continue;
+      const row = lines[i].split(';').map(c => c.replace(/"/g,'').trim());
+      const obj = {};
+      headers.forEach((h,j) => obj[h] = row[j]);
+      data.push(obj);
     }
 
-    console.log('Parsed CSV:', data);
-    setStatus(`CSV geparst: ${data.length} Zeilen`);
+    // Neue Begehung hinzufügen oder letzte überschreiben
+    const neueBegehung = confirm("Neue Begehung hinzufügen?\nAbbrechen = letzte Begehung überschreiben");
 
-    // --- IndexedDB + Map einfügen ---
-    await clearAll();
+    // IndexedDB + Map vorbereiten
     markersLayer.clearLayers();
     tempMarkers = [];
     generatedPoints = [];
+    const allStocks = await getAll();
+    const stockMap = {};
+    allStocks.forEach(s => stockMap[s.id] = s);
 
-    for(const s of data){
-        const lat = parseFloat(s.lat.replace(/^'/,'')); // evtl. führendes ' entfernen
-        const lon = parseFloat(s.lon.replace(/^'/,''));
-        const id = s.id || `R${s.row}-S${s.index}`;
-        const stock = {
-            id,
-            row: parseInt(s.row),
-            index: parseInt(s.index),
-            lat,
-            lon,
-            photos: [],
-            last: s.last_wuchs || s.last_gesund || s.last_reife || s.last_kommentar ? {
-                wuchs: parseInt(s.last_wuchs)||0,
-                gesund: parseInt(s.last_gesund)||0,
-                reife: parseInt(s.last_reife)||0,
-                kom: s.last_kommentar||'',
-                at: new Date().toISOString()
-            } : null,
-            created: s.created || new Date().toISOString()
+    for (const s of data) {
+      const lat = parseFloat(s.lat.replace(/^'/,''));
+      const lon = parseFloat(s.lon.replace(/^'/,''));
+      const id = s.id || `R${s.row}-S${s.index}`;
+
+      // lastsCSV erzeugen, robust gegen leere / ungültige Werte
+      const lastsCSV = [];
+      for (let i = 0; i < numBegehungen; i++) {
+        const suffix = i === 0 ? '' : `_${i}`;
+
+        const w = parseInt(s[`wuchs${suffix}`]);
+        const g = parseInt(s[`gesund${suffix}`]);
+        const r = parseInt(s[`reife${suffix}`]);
+
+        // Datum prüfen, Default auf jetzt
+        let atDate = new Date(s[`created${suffix}`]);
+        if (isNaN(atDate.getTime())) atDate = new Date();
+
+        lastsCSV.push({
+          wuchs: isNaN(w) ? 0 : w,
+          gesund: isNaN(g) ? 0 : g,
+          reife: isNaN(r) ? 0 : r,
+          kom: s[`kommentar${suffix}`] || '',
+          at: atDate.toISOString()
+        });
+      }
+
+      let stock = stockMap[id];
+      if(stock) {
+        if(neueBegehung){
+          stock.lasts = stock.lasts || [];
+          stock.lasts.push(...lastsCSV);
+        } else {
+          stock.last = lastsCSV[0] || null;
+        }
+      } else {
+        // neues Stock-Objekt
+        let createdDate = new Date(s.created);
+        if (isNaN(createdDate.getTime())) createdDate = new Date();
+
+        stock = {
+          id,
+          row: parseInt(s.row),
+          index: parseInt(s.index),
+          lat,
+          lon,
+          photos: [],
+          lasts: neueBegehung ? lastsCSV : [],
+          last: neueBegehung ? null : lastsCSV[0] || null,
+          created: createdDate.toISOString()
         };
+      }
 
-        await putStock(stock);
+      await putStock(stock);
 
-        const marker = L.circleMarker([lat, lon], {radius:6, color:'#2a9d8f'}).addTo(markersLayer);
-        marker.__meta = {id: stock.id, row: stock.row, index: stock.index, lat, lon};
-        marker.on('click', ()=> openDetail(marker.__meta));
-        generatedPoints.push(marker.__meta);
+      // Marker auf Map setzen
+      const marker = L.circleMarker([lat, lon], {radius:6, color:'#2a9d8f'}).addTo(markersLayer);
+      marker.__meta = {id: stock.id, row: stock.row, index: stock.index, lat, lon};
+      marker.on('click', () => {
+        highlightedId = marker.__meta.id;
+        openDetail(marker.__meta);
+        refreshList();
+      });
+
+      generatedPoints.push(marker.__meta);
     }
 
     refreshList();
-    setStatus(`CSV importiert: ${generatedPoints.length} Stöcke`);
-};
+    setStatus(`CSV importiert: ${generatedPoints.length} Stöcke, ${numBegehungen} Begehungen`);
+  };
 
-  reader.readAsText(file, 'utf-8');
-
-  // wichtig: reset, damit dieselbe Datei nochmal gewählt werden kann
-  ev.target.value = '';
+  reader.readAsText(file,'utf-8');
+  ev.target.value='';
 });
+
+
   </script>
 </body>
 </html>
