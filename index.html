@@ -29,6 +29,7 @@
     <button id="btn-export">Export CSV</button>
     <button id="btn-import">Import CSV</button>
     <button id="btn-clear">DB löschen</button>
+    <button id="btn-locate">📍 Mein Standort</button>
     <span id="status"></span>
   </div>
   <input id="csv-file" type="file" accept=".csv,text/csv" style="display:none">
@@ -69,7 +70,55 @@
 
     // --- Map Setup ---
     const map = L.map('map').setView([48.0, 8.0], 16);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:30}).addTo(map);
+    let userLocationMarker = null;
+    let userLocationCircle = null;
+
+    document.getElementById('btn-locate').onclick = ()=>{
+  if(!navigator.geolocation){
+    alert('Geolocation wird von diesem Gerät nicht unterstützt');
+    return;
+  }
+
+  setStatus('Standort wird ermittelt…');
+
+  navigator.geolocation.getCurrentPosition(
+    (pos)=>{
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      const acc = pos.coords.accuracy;
+
+      // alte Marker entfernen
+      if(userLocationMarker) map.removeLayer(userLocationMarker);
+      if(userLocationCircle) map.removeLayer(userLocationCircle);
+
+      // Marker setzen
+      userLocationMarker = L.marker([lat, lon], {
+        title: 'Mein Standort'
+      }).addTo(map);
+
+      // Genauigkeitskreis
+      userLocationCircle = L.circle([lat, lon], {
+        radius: acc
+      }).addTo(map);
+
+      // Karte zentrieren
+      map.setView([lat, lon], 18);
+
+      setStatus(`Standort gefunden (±${Math.round(acc)} m)`);
+    },
+    (err)=>{
+      console.error(err);
+      alert('Standort konnte nicht ermittelt werden');
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
+};
+
 
     let tempMarkers = [];
     let generatedPoints = [];
