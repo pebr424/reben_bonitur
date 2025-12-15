@@ -248,7 +248,7 @@
 
     async function saveInitial(points){
       for(const p of points){
-        const obj = { id: p.id, index: p.index, row: p.row, lat: p.lat, lon: p.lon, photos: [], last: null, created: new Date().toISOString() };
+        const obj = { id: p.id, index: p.index, row: p.row, lat: p.lat, lon: p.lon, photos: [], lasts: [], created: new Date().toISOString() };
         await putStock(obj);
       }
     }
@@ -293,90 +293,130 @@
 
     // modal / detail
     function openDetail(meta){
-      (async ()=>{
-        let record;
-        const all = await getAll();
-        record = all.find(x=>x.id===meta.id) || meta;
-        const title = document.getElementById('modal-title'); title.textContent = record.id || 'Stock';
-        const body = document.getElementById('modal-body');
-        body.innerHTML = `
-          <div>Row: ${record.row ?? ''} — Index: ${record.index ?? ''}</div>
-          <div>Lat: ${record.lat?.toFixed(6) ?? ''} Lon: ${record.lon?.toFixed(6) ?? ''}</div>
-          <label>Wuchs (1-5): <input id="f-wuchs" type="number" min="1" max="5" value="${(record.last||{}).wuchs||''}"></label><br>
-          <label>Gesundheit (1-5): <input id="f-gesund" type="number" min="1" max="5" value="${(record.last||{}).gesund||''}"></label><br>
-          <label>Reife (1-5): <input id="f-reife" type="number" min="1" max="5" value="${(record.last||{}).reife||''}"></label><br>
-          <label>Kommentar:<br><textarea id="f-komm">${(record.last||{}).kom || ''}</textarea></label><br>
-          <label>Foto: <input id="f-photo" type="file" accept="image/*" capture="environment"></label>
-          <div id="thumbs"></div>
-        `;
-        if(record.photos) for(const p of record.photos){ const img = document.createElement('img'); img.src = p; img.className='photo-thumb'; document.getElementById('thumbs').appendChild(img); }
-        document.getElementById('modal').style.display='flex';
+  (async () => {
 
-        document.getElementById('btn-save').onclick = async ()=>{
-          const w = parseInt(document.getElementById('f-wuchs').value||0);
-          const g = parseInt(document.getElementById('f-gesund').value||0);
-          const r = parseInt(document.getElementById('f-reife').value||0);
-          const k = document.getElementById('f-komm').value||'';
-          const fileIn = document.getElementById('f-photo');
-          if(fileIn.files && fileIn.files[0]){
-            const f = fileIn.files[0];
-            const b64 = await fileToBase64(f);
-            record.photos = record.photos || [];
-            record.photos.push(b64);
-          }
-          record.last = { wuchs:w, gesund:g, reife:r, kom:k, at: new Date().toISOString() };
-          await putStock(record);
-          document.getElementById('modal').style.display='none';
-          refreshList();
-        };
-        document.getElementById('btn-close').onclick = ()=>{ document.getElementById('modal').style.display='none'; };
-      })();
+    // Datensatz laden
+    const all = await getAll();
+    const record = all.find(x => x.id === meta.id) || meta;
+
+    // letzte Begehung (oder leere Defaults)
+    const last = record.lasts?.length
+      ? record.lasts[record.lasts.length - 1]
+      : { wuchs:'', gesund:'', reife:'', kom:'' };
+
+    // Modal-Titel
+    document.getElementById('modal-title').textContent = record.id || 'Stock';
+
+    // Modal-Body
+    const body = document.getElementById('modal-body');
+    body.innerHTML = `
+      <div>Row: ${record.row ?? ''} — Index: ${record.index ?? ''}</div>
+      <div>Lat: ${record.lat?.toFixed(6) ?? ''} Lon: ${record.lon?.toFixed(6) ?? ''}</div>
+
+      <label>Wuchs (1–5):
+        <input id="f-wuchs" type="number" min="1" max="5" value="${last.wuchs}">
+      </label><br>
+
+      <label>Gesundheit (1–5):
+        <input id="f-gesund" type="number" min="1" max="5" value="${last.gesund}">
+      </label><br>
+
+      <label>Reife (1–5):
+        <input id="f-reife" type="number" min="1" max="5" value="${last.reife}">
+      </label><br>
+
+      <label>Kommentar:<br>
+        <textarea id="f-komm">${last.kom || ''}</textarea>
+      </label><br>
+
+      <label>Foto:
+        <input id="f-photo" type="file" accept="image/*" capture="environment">
+      </label>
+
+      <div id="thumbs"></div>
+    `;
+
+    // Fotos anzeigen
+    const thumbs = document.getElementById('thumbs');
+    if (record.photos?.length){
+      for (const p of record.photos){
+        const img = document.createElement('img');
+        img.src = p;
+        img.className = 'photo-thumb';
+        thumbs.appendChild(img);
+      }
     }
+
+    // Modal öffnen
+    document.getElementById('modal').style.display = 'flex';
+
+    // SPEICHERN
+    document.getElementById('btn-save').onclick = async () => {
+      const w = parseInt(document.getElementById('f-wuchs').value) || 0;
+      const g = parseInt(document.getElementById('f-gesund').value) || 0;
+      const r = parseInt(document.getElementById('f-reife').value) || 0;
+      const k = document.getElementById('f-komm').value || '';
+
+      // Foto
+      const fileIn = document.getElementById('f-photo');
+      if (fileIn.files && fileIn.files[0]){
+        const b64 = await fileToBase64(fileIn.files[0]);
+        record.photos = record.photos || [];
+        record.photos.push(b64);
+      }
+
+      // neue Begehung anhängen
+      record.lasts = record.lasts || [];
+      record.lasts.push({
+        wuchs: w,
+        gesund: g,
+        reife: r,
+        kom: k,
+        at: new Date().toISOString()
+      });
+
+      await putStock(record);
+      document.getElementById('modal').style.display = 'none';
+      refreshList();
+    };
+
+    document.getElementById('btn-close').onclick = () => {
+      document.getElementById('modal').style.display = 'none';
+    };
+
+  })();
+}
+
+   
+
 
     function fileToBase64(file){ return new Promise((res,rej)=>{ const r = new FileReader(); r.onload = ()=>res(r.result); r.onerror = e => rej(e); r.readAsDataURL(file); }); }
 
     document.getElementById('btn-export').onclick = async () => {
   const all = await getAll();
 
-  // Sortierung wie in Weboberfläche
-  all.sort((a,b) => {
-    if(a.row !== b.row) return a.row - b.row;
-    return a.index - b.index;
-  });
+  all.sort((a,b)=> a.row - b.row || a.index - b.index);
 
-  // Zuerst die maximale Anzahl Begehungen finden
-  let maxBegehung = 0;
-  all.forEach(s => {
-    const count = (s.lasts?.length || 0) + (s.last ? 1 : 0);
-    maxBegehung = Math.max(maxBegehung, count);
-  });
+  const maxBegehungen = Math.max(...all.map(s => s.lasts.length));
 
-  // Header bauen: id,row,index,lat,lon + für jede Begehung wuchs,gesund,reife,kommentar,created
-  const headers = ['id','row','index','lat','lon'];
-  for(let i=0; i<maxBegehung; i++){
-    const suffix = i===0 ? '' : '_' + i;
-    headers.push(`wuchs${suffix}`, `gesund${suffix}`, `reife${suffix}`, `kommentar${suffix}`, `created${suffix}`);
+  const header = ['id','row','index','lat','lon','created'];
+  for (let i=0;i<maxBegehungen;i++){
+    header.push('wuchs','gesund','reife','kommentar','created');
   }
 
-  const rows = [headers];
+  const rows = [header];
 
-  // Daten einfügen
-  for(const s of all){
-    const row = [
-      s.id,
-      s.row,
-      s.index,
-      s.lat != null ? s.lat.toFixed(6) : '',
-      s.lon != null ? s.lon.toFixed(6) : ''
+  for (const s of all) {
+    const r = [
+      s.id, s.row, s.index,
+      s.lat.toFixed(6),
+      s.lon.toFixed(6),
+      new Date(s.created).toLocaleDateString('de-DE')
     ];
 
-    // Alle Begehungen zusammenführen: zuerst lasts[], dann ggf. aktuelle last
-    const begehungen = [...(s.lasts || [])];
-    if(s.last) begehungen.push(s.last);
-
-    for(let i=0; i<maxBegehung; i++){
-      const b = begehungen[i] || {};
-      row.push(
+    for (let i=0;i<maxBegehungen;i++){
+      const b = s.lasts[i] || {};
+      r.push(
         b.wuchs || '',
         b.gesund || '',
         b.reife || '',
@@ -385,19 +425,23 @@
       );
     }
 
-    rows.push(row);
+    rows.push(r);
   }
 
-  const csv = rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(';')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'reben_bonitur.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-  setStatus('CSV exportiert mit allen Begehungen');
+  const csv = rows.map(r =>
+    r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')
+  ).join('\n');
+
+  downloadCSV(csv, 'reben_bonitur.csv');
 };
+
+function downloadCSV(text, name){
+  const blob = new Blob([text], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+}
 
 
 // Sortierung wie in der Weboberfläche
@@ -419,119 +463,91 @@
   document.getElementById('csv-file').click();
 };
 
-document.getElementById('csv-file').addEventListener('change', async (ev) => {
+document.getElementById('csv-file').addEventListener('change', async ev => {
   const file = ev.target.files[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = async () => {
-    const text = reader.result;
-    setStatus('CSV-Datei gelesen');
+  const text = await file.text();
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) {
+    setStatus('CSV leer');
+    return;
+  }
 
-    const lines = text.trim().split('\n');
-    if (lines.length < 2) { setStatus('Keine Daten in CSV'); return; }
+  const headers = lines[0].split(';').map(h => h.replace(/"/g,'').trim());
 
-    // Header analysieren
-    const headers = lines[0].split(';').map(h => h.replace(/"/g,'').trim());
+  // Basis-Spalten
+  const baseCols = ['id','row','index','lat','lon','created'];
+  const baseCount = baseCols.length;
 
-    // Anzahl Begehungen über Header ermitteln (wuchs-Spalten)
-    const numBegehungen = headers.filter(h => h.startsWith('wuchs')).length;
+  // Anzahl Begehungen global bestimmen
+  const begehungCount = Math.floor((headers.length - baseCount) / 5);
+  if (begehungCount < 0) {
+  setStatus('CSV-Header ungültig');
+  return;
+}
 
-    // CSV in Objekte umwandeln
-    const data = [];
-    for (let i = 1; i < lines.length; i++) {
-      if(!lines[i].trim()) continue;
-      const row = lines[i].split(';').map(c => c.replace(/"/g,'').trim());
-      const obj = {};
-      headers.forEach((h,j) => obj[h] = row[j]);
-      data.push(obj);
-    }
+  const neueBegehung = confirm('Neue Begehung anhängen?');
 
-    // Neue Begehung hinzufügen oder letzte überschreiben
-    const neueBegehung = confirm("Neue Begehung hinzufügen?\nAbbrechen = letzte Begehung überschreiben");
+  await clearAll();
+  markersLayer.clearLayers();
 
-    // IndexedDB + Map vorbereiten
-    markersLayer.clearLayers();
-    tempMarkers = [];
-    generatedPoints = [];
-    const allStocks = await getAll();
-    const stockMap = {};
-    allStocks.forEach(s => stockMap[s.id] = s);
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
 
-    for (const s of data) {
-      const lat = parseFloat(s.lat.replace(/^'/,''));
-      const lon = parseFloat(s.lon.replace(/^'/,''));
-      const id = s.id || `R${s.row}-S${s.index}`;
+    const cells = lines[i].split(';').map(c => c.replace(/"/g,'').trim());
 
-      // lastsCSV erzeugen, robust gegen leere / ungültige Werte
-      const lastsCSV = [];
-      for (let i = 0; i < numBegehungen; i++) {
-        const suffix = i === 0 ? '' : `_${i}`;
+    const stock = {
+      id: cells[0],
+      row: parseInt(cells[1]) || 0,
+      index: parseInt(cells[2]) || 0,
+      lat: parseFloat(cells[3]),
+      lon: parseFloat(cells[4]),
+      created: parseDate(cells[5]).toISOString(),
+      photos: [],
+      lasts: []
+    };
 
-        const w = parseInt(s[`wuchs${suffix}`]);
-        const g = parseInt(s[`gesund${suffix}`]);
-        const r = parseInt(s[`reife${suffix}`]);
+    let offset = baseCount;
 
-        // Datum prüfen, Default auf jetzt
-        let atDate = new Date(s[`created${suffix}`]);
-        if (isNaN(atDate.getTime())) atDate = new Date();
-
-        lastsCSV.push({
-          wuchs: isNaN(w) ? 0 : w,
-          gesund: isNaN(g) ? 0 : g,
-          reife: isNaN(r) ? 0 : r,
-          kom: s[`kommentar${suffix}`] || '',
-          at: atDate.toISOString()
-        });
-      }
-
-      let stock = stockMap[id];
-      if(stock) {
-        if(neueBegehung){
-          stock.lasts = stock.lasts || [];
-          stock.lasts.push(...lastsCSV);
-        } else {
-          stock.last = lastsCSV[0] || null;
-        }
-      } else {
-        // neues Stock-Objekt
-        let createdDate = new Date(s.created);
-        if (isNaN(createdDate.getTime())) createdDate = new Date();
-
-        stock = {
-          id,
-          row: parseInt(s.row),
-          index: parseInt(s.index),
-          lat,
-          lon,
-          photos: [],
-          lasts: neueBegehung ? lastsCSV : [],
-          last: neueBegehung ? null : lastsCSV[0] || null,
-          created: createdDate.toISOString()
-        };
-      }
-
-      await putStock(stock);
-
-      // Marker auf Map setzen
-      const marker = L.circleMarker([lat, lon], {radius:6, color:'#2a9d8f'}).addTo(markersLayer);
-      marker.__meta = {id: stock.id, row: stock.row, index: stock.index, lat, lon};
-      marker.on('click', () => {
-        highlightedId = marker.__meta.id;
-        openDetail(marker.__meta);
-        refreshList();
+    for (let b = 0; b < begehungCount; b++) {
+      stock.lasts.push({
+        wuchs:  parseInt(cells[offset++]) || 0,
+        gesund: parseInt(cells[offset++]) || 0,
+        reife:  parseInt(cells[offset++]) || 0,
+        kom:    cells[offset++] || '',
+        at:     parseDate(cells[offset++]).toISOString()
       });
-
-      generatedPoints.push(marker.__meta);
     }
 
-    refreshList();
-    setStatus(`CSV importiert: ${generatedPoints.length} Stöcke, ${numBegehungen} Begehungen`);
-  };
+    if (neueBegehung) {
+      stock.lasts.push({
+        wuchs: 0, gesund: 0, reife: 0, kom: '',
+        at: new Date().toISOString()
+      });
+    }
 
-  reader.readAsText(file,'utf-8');
-  ev.target.value='';
+    await putStock(stock);
+
+    const m = L.circleMarker([stock.lat, stock.lon], { radius:6 }).addTo(markersLayer);
+    m.__meta = stock;
+    m.on('click', () => openDetail(stock));
+  }
+
+  refreshList();
+  setStatus(`CSV importiert (${begehungCount + (neueBegehung ? 1 : 0)} Begehungen)`);
+  ev.target.value = '';
 });
+
+function parseDate(v){
+  if (!v) return new Date();
+  if (v.includes('.')) {
+    const [d,m,y] = v.split('.').map(Number);
+    return new Date(y, m-1, d);
+  }
+  const d = new Date(v);
+  return isNaN(d) ? new Date() : d;
+}
 
 
   </script>
