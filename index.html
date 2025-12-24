@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="de">
 <head>
@@ -33,6 +34,15 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
+    <div id="top-bar" style="position:fixed; top:0; left:0; right:0; background:#fff; padding:6px 12px; border-bottom:1px solid #ccc; z-index:1000; display:flex; gap:8px;">
+        <button id="btn-top">Top</button>
+        <select id="select-wingert">
+          <option value="ALL">Alle Wingert</option>
+        </select>
+        <button id="btn-row">Reihe</button>
+        <button id="btn-stock">Stock</button>
+      </div>
+      <div style="height:50px;"></div> <!-- Platzhalter, damit die Toolbar den Inhalt nicht überlappt -->
   <div class="toolbar">
     <button id="btn-set-row">Reihe setzen (2 Punkte)</button>
     <label class="small">Stock-Abstand (m): <input id="input-spacing" type="number" value="1" min="0.1" step="0.1" style="width:70px"></label>
@@ -47,12 +57,14 @@
     <button id="btn-locate">📍 Mein Standort</button>
     <span id="status"></span>
   </div>
-  <input id="csv-file" type="file" accept=".csv,text/csv" style="display:none">
+  <input id="csv-file" type="file" accept=".csv,.zip" style="display:none">
   <div id="map"></div>
   <div class="panel">
     <h3>Liste (tippe Punkt auf Karte oder hier)</h3>
     <div id="list"></div>
   </div>
+ 
+  
 
   <!-- Detail Modal -->
   <div id="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); align-items:center; justify-content:center;">
@@ -65,9 +77,18 @@
       </div>
     </div>
   </div>
+ 
+  
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
   <script>
+   
+   let currentWingert = 'ALL';
+const wingertsSet = new Set();
+
+
     let highlightedId = null;
     // --- IndexedDB Wrapper ---
     const DB_NAME = 'reben-bonitur-v1';
@@ -140,6 +161,38 @@
     let generatedPoints = [];
     const markersLayer = L.layerGroup().addTo(map);
 
+    document.getElementById('btn-top').onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
+document.getElementById('btn-row').onclick = async () => {
+  const rowNum = parseInt(prompt('Welche Reihe?'));
+  if(isNaN(rowNum)) return;
+
+  const all = await getAll();
+  const record = all.find(r => (currentWingert === 'ALL' || r.wingert === currentWingert) && r.row === rowNum);
+  if(!record){ alert('Reihe nicht gefunden'); return; }
+
+  document.getElementById(`list-${record.id}`).scrollIntoView({ behavior:'smooth', block:'center' });
+  highlightedId = record.id;
+  refreshList();
+};
+
+document.getElementById('btn-stock').onclick = async () => {
+  const rowNum = parseInt(prompt('Reihe des Stocks?'));
+  if(isNaN(rowNum)) return;
+  const stockNum = parseInt(prompt('Stocknummer?'));
+  if(isNaN(stockNum)) return;
+
+  const all = await getAll();
+  const record = all.find(r => (currentWingert === 'ALL' || r.wingert === currentWingert) && r.row === rowNum && r.index === stockNum);
+  if(!record){ alert('Stock nicht gefunden'); return; }
+
+  document.getElementById(`list-${record.id}`).scrollIntoView({ behavior:'smooth', block:'center' });
+  highlightedId = record.id;
+  openDetail(record);
+  refreshList();
+};
+
+
     document.getElementById('btn-set-row').onclick = ()=>{
       tempMarkers.forEach(m=>map.removeLayer(m)); tempMarkers = [];
       map.once('click', e=>{
@@ -185,6 +238,21 @@
 
     // --- Generate stocks for base row + parallels ---
     document.getElementById('btn-generate').onclick = async ()=> {
+
+let wingertName = prompt('Name des Wingerts?');
+if (!wingertName) {
+  setStatus('Generieren abgebrochen (kein Wingert-Name)');
+  return;
+}
+wingertName = wingertName.trim();
+
+wingertsSet.add(wingertName);
+refreshWingertSelect([...wingertsSet]);
+currentWingert = wingertName;
+document.getElementById('select-wingert').value = wingertName;
+localStorage.setItem('lastWingert', wingertName);
+
+
   const pts = tempMarkers.filter(p=>p instanceof L.Marker).map(m=>m.getLatLng());
   if(pts.length < 2){
     setStatus('Bitte zuerst zwei Punkte setzen.');
@@ -230,18 +298,21 @@
     for(let i=0; i<count; i++){
       const d = i * spacing;
       const [lat,lon] = destPoint(row.start.lat, row.start.lng, b, d);
-      const id = `R${rIndex+1}-S${i+1}`;
+      const shortId = `R${rIndex+1}-S${i+1}`;
+      const fullId  = `${wingertName}-${shortId}`;
 
       const marker = L.circleMarker([lat,lon], {radius:6}).addTo(markersLayer);
-      marker.__meta = {id, row:rIndex+1, index:i+1, lat, lon};
+      marker.__meta = {
+  id: fullId,      // eindeutig für DB, Liste, Scroll
+  row: rIndex+1,
+  index: i+1,
+  lat,
+  lon,
+  wingert: wingertName
+};
 
-      marker.on('click', ()=> {
-  highlightedId = marker.__meta.id;
+    marker.on('click', () => focusStock(marker.__meta, true));
 
-  openDetail(marker.__meta);
-
-  refreshList();   // <-- wichtig
-});
 
 
 
@@ -255,49 +326,87 @@
 };
 
 
-    async function saveInitial(points){
-      for(const p of points){
-        const obj = { id: p.id, index: p.index, row: p.row, lat: p.lat, lon: p.lon, photos: [], lasts: [], created: new Date().toISOString() };
-        await putStock(obj);
-      }
-    }
+async function saveInitial(points){
+  for(const p of points){
+    const obj = {
+      id: p.id,         // ✅ einfach p.id, nicht nochmal Wingert dranhängen
+      wingert: p.wingert,
+      index: p.index,
+      row: p.row,
+      lat: p.lat,
+      lon: p.lon,
+      photos: [],
+      lasts: [],
+      created: new Date().toISOString()
+    };
+    await putStock(obj);
+  }
+}
+
+
 
     async function refreshList(){
   const all = await getAll();
   const list = document.getElementById('list');
   list.innerHTML = '';
 
-  all.sort((a,b)=>{
-    if(a.row !== b.row) return a.row - b.row;
-    return a.index - b.index;
-  });
+  // Wingert-Filter
+  const filtered = all.filter(s => currentWingert === 'ALL' || s.wingert === currentWingert);
 
-  for(const s of all){
+  filtered.sort((a, b) => {
+  if (a.wingert !== b.wingert) {
+    return a.wingert.localeCompare(b.wingert, 'de');
+  }
+  if (a.row !== b.row) {
+    return a.row - b.row;
+  }
+  return a.index - b.index;
+});
+
+
+  for(const s of filtered){
     const el = document.createElement('div');
     el.id = `list-${s.id}`;
     el.className = 'point';
-    el.textContent = `${s.id} — R${s.row} S${s.index}`;
-    el.onclick = ()=> openDetail(s);
+    el.textContent = `${s.wingert} — R${s.row} S${s.index}`;
+    el.onclick = ()=> focusStock(s, true);
 
-    // ⭐ HIGHLIGHT HIER (nach Render!)
     if(s.id === highlightedId){
-      el.classList.add('highlight');
+  el.classList.add('highlight');
+}
 
-      // Scroll erst NACH DOM-Aufbau
-      setTimeout(()=>{
-        el.scrollIntoView({ behavior:'smooth', block:'center' });
-      }, 30);
-
-      // Highlight später entfernen
-      setTimeout(()=>{
-        el.classList.remove('highlight');
-        highlightedId = null;
-      }, 15000);
-    }
 
     list.appendChild(el);
   }
 }
+
+async function focusStock(stock, openModal = true){
+  // 1. Wingert setzen
+  if (stock.wingert && currentWingert !== stock.wingert){
+    currentWingert = stock.wingert;
+    const sel = document.getElementById('select-wingert');
+    if (sel) sel.value = stock.wingert;
+  }
+
+  // 2. Liste neu aufbauen
+  await refreshList();
+
+  // 3. Highlight setzen
+  highlightedId = stock.id;
+
+  // 4. Scrollen
+  setTimeout(() => {
+    const el = document.getElementById(`list-${stock.id}`);
+    if (el){
+      el.scrollIntoView({ behavior:'smooth', block:'center' });
+      el.classList.add('highlight');
+    }
+  }, 50);
+
+  // 5. Modal öffnen
+  if (openModal) openDetail(stock);
+}
+
 
 
     // modal / detail
@@ -402,7 +511,18 @@
     function fileToBase64(file){ return new Promise((res,rej)=>{ const r = new FileReader(); r.onload = ()=>res(r.result); r.onerror = e => rej(e); r.readAsDataURL(file); }); }
 
     document.getElementById('btn-export').onclick = async () => {
-  const all = await getAll();
+  const allStocks = await getAll();
+
+  // 🔹 Wingert-Filter anwenden
+  const all = allStocks.filter(s =>
+    currentWingert === 'ALL' || s.wingert === currentWingert
+  );
+
+  if (!all.length){
+    alert('Kein Wingert zum Exportieren ausgewählt');
+    return;
+  }
+
 
   all.sort((a,b)=> a.row - b.row || a.index - b.index);
 
@@ -438,10 +558,20 @@
   }
 
   const csv = rows.map(r =>
-    r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')
-  ).join('\n');
+  r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')
+).join('\n');
 
-  downloadCSV(csv, 'reben_bonitur.csv');
+// 📅 Datum YYYY-MM-DD
+const date = new Date().toISOString().slice(0, 10);
+
+// 🏷️ Dateiname aus aktuellem Wingert
+const filename =
+  currentWingert === 'ALL'
+    ? `alle-wingerte-${date}.csv`
+    : `${currentWingert}-${date}.csv`;
+
+downloadCSV(csv, filename);
+
 };
 
 function downloadCSV(text, name){
@@ -472,81 +602,20 @@ function downloadCSV(text, name){
   document.getElementById('csv-file').click();
 };
 
-document.getElementById('csv-file').addEventListener('change', async ev => {
-  const file = ev.target.files[0];
-  if (!file) return;
 
-  const text = await file.text();
-  const lines = text.trim().split('\n');
-  if (lines.length < 2) {
-    setStatus('CSV leer');
-    return;
-  }
-
-  const headers = lines[0].split(';').map(h => h.replace(/"/g,'').trim());
-
-  // Basis-Spalten
-  const baseCols = ['id','row','index','lat','lon','created'];
-  const baseCount = baseCols.length;
-
-  // Anzahl Begehungen global bestimmen
-  const begehungCount = Math.floor((headers.length - baseCount) / 5);
-  if (begehungCount < 0) {
-  setStatus('CSV-Header ungültig');
-  return;
+function refreshWingertSelect(wingerts){
+  const sel = document.getElementById('select-wingert');
+  if(!sel) return;
+  sel.innerHTML = '<option value="ALL">Alle Wingert</option>';
+  wingerts.forEach(w => {
+    const opt = document.createElement('option');
+    opt.value = w;         // ✅ nur Wingert-Name
+    opt.textContent = w;
+    sel.appendChild(opt);
+  });
 }
 
-  const neueBegehung = confirm('Neue Begehung anhängen?');
 
-  await clearAll();
-  markersLayer.clearLayers();
-
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-
-    const cells = lines[i].split(';').map(c => c.replace(/"/g,'').trim());
-
-    const stock = {
-      id: cells[0],
-      row: parseInt(cells[1]) || 0,
-      index: parseInt(cells[2]) || 0,
-      lat: parseFloat(cells[3]),
-      lon: parseFloat(cells[4]),
-      created: parseDate(cells[5]).toISOString(),
-      photos: [],
-      lasts: []
-    };
-
-    let offset = baseCount;
-
-    for (let b = 0; b < begehungCount; b++) {
-      stock.lasts.push({
-        wuchs:  parseInt(cells[offset++]) || 0,
-        gesund: parseInt(cells[offset++]) || 0,
-        reife:  parseInt(cells[offset++]) || 0,
-        kom:    cells[offset++] || '',
-        at:     parseDate(cells[offset++]).toISOString()
-      });
-    }
-
-    if (neueBegehung) {
-      stock.lasts.push({
-        wuchs: 0, gesund: 0, reife: 0, kom: '',
-        at: new Date().toISOString()
-      });
-    }
-
-    await putStock(stock);
-
-    const m = L.circleMarker([stock.lat, stock.lon], { radius:6 }).addTo(markersLayer);
-    m.__meta = stock;
-    m.on('click', () => openDetail(stock));
-  }
-
-  refreshList();
-  setStatus(`CSV importiert (${begehungCount + (neueBegehung ? 1 : 0)} Begehungen)`);
-  ev.target.value = '';
-});
 
 function parseDate(v){
   if (!v) return new Date();
@@ -557,6 +626,125 @@ function parseDate(v){
   const d = new Date(v);
   return isNaN(d) ? new Date() : d;
 }
+async function importZip(file){
+  const zip = await JSZip.loadAsync(file);
+
+  const csvFiles = Object.values(zip.files)
+    .filter(f => !f.dir && f.name.toLowerCase().endsWith('.csv'));
+
+  if (!csvFiles.length){
+    setStatus('Keine CSV-Dateien im ZIP gefunden');
+    return;
+  }
+
+  const neueBegehung = confirm(
+    `ZIP enthält ${csvFiles.length} CSV-Dateien.\n` +
+    `Als neue Begehungen anhängen?`
+  );
+
+  for (const f of csvFiles){
+    const text = await f.async('string');
+    await importCsvText(await file.text(), null, file.name);
+
+  }
+
+  refreshList();
+  setStatus(`ZIP importiert (${csvFiles.length} CSVs)`);
+}
+
+async function importCsvText(text, neueBegehungOverride = null, sourceName = ''){
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return;
+  const wingertName = sourceName.replace(/\.csv$/i, '');
+wingertsSet.add(wingertName);
+refreshWingertSelect([...wingertsSet]);
+const sel = document.getElementById('select-wingert');
+if(sel) sel.value = wingertName;
+
+refreshList();
+
+  let neueBegehung = neueBegehungOverride;
+  if (neueBegehung === null){
+    neueBegehung = confirm('Neue Begehung anhängen?');
+  }
+
+  for (let i=1;i<lines.length;i++){
+    if (!lines[i].trim()) continue;
+
+    const cells = lines[i].split(';').map(c => c.replace(/"/g,'').trim());
+    
+
+
+
+    const stock = {
+  id: `${wingertName}-${cells[0]}`, // Wingert-R1-S3
+  wingert: wingertName,
+  row: parseInt(cells[1]),
+  index: parseInt(cells[2]),
+  lat: parseFloat(cells[3]),
+  lon: parseFloat(cells[4]),
+  created: parseDate(cells[5]).toISOString(),
+  photos: [],
+  lasts: []
+};
+
+
+   
+    const baseCols = 6; // id,row,index,lat,lon,created
+const begehungCount = Math.floor((cells.length - baseCols) / 5);
+
+let offset = baseCols;
+for (let b=0; b<begehungCount; b++){
+  stock.lasts.push({
+    wuchs:  parseInt(cells[offset++]) || 0,
+    gesund: parseInt(cells[offset++]) || 0,
+    reife:  parseInt(cells[offset++]) || 0,
+    kom:    cells[offset++] || '',
+    at:     parseDate(cells[offset++]).toISOString()
+  });
+}
+
+
+    if (neueBegehung){
+      stock.lasts.push({
+        wuchs:0, gesund:0, reife:0, kom:'',
+        at:new Date().toISOString()
+      });
+    }
+
+    await putStock(stock);
+    
+    const m = L.circleMarker([stock.lat, stock.lon], { radius:6 }).addTo(markersLayer);
+m.__meta = stock;
+m.on('click', () => focusStock(m.__meta, true));
+
+  }
+}
+document.getElementById('csv-file').addEventListener('change', async ev => {
+  const file = ev.target.files[0];
+  if (!file) return;
+
+  if (file.name.toLowerCase().endsWith('.zip')) {
+    await importZip(file);
+  } else {
+    await importCsvText(await file.text());
+  }
+
+  ev.target.value = '';
+});
+
+document.getElementById('select-wingert').addEventListener('change', (e) => {
+  currentWingert = e.target.value;
+  localStorage.setItem('lastWingert', currentWingert);
+  const lastWingert = localStorage.getItem('lastWingert');
+if (lastWingert){
+  currentWingert = lastWingert;
+  const sel = document.getElementById('select-wingert');
+  if (sel) sel.value = lastWingert;
+}
+
+  refreshList();
+});
 
 
   </script>
