@@ -298,18 +298,10 @@ localStorage.setItem('lastWingert', wingertName);
     for(let i=0; i<count; i++){
       const d = i * spacing;
       const [lat,lon] = destPoint(row.start.lat, row.start.lng, b, d);
-      const shortId = `R${rIndex+1}-S${i+1}`;
-      const fullId  = `${wingertName}-${shortId}`;
+      const id = `R${rIndex+1}-S${i+1}`;
 
       const marker = L.circleMarker([lat,lon], {radius:6}).addTo(markersLayer);
-      marker.__meta = {
-  id: fullId,      // eindeutig für DB, Liste, Scroll
-  row: rIndex+1,
-  index: i+1,
-  lat,
-  lon,
-  wingert: wingertName
-};
+      marker.__meta = {id, row:rIndex+1, index:i+1, lat, lon,wingert: wingertName};
 
     marker.on('click', () => focusStock(marker.__meta, true));
 
@@ -329,8 +321,8 @@ localStorage.setItem('lastWingert', wingertName);
 async function saveInitial(points){
   for(const p of points){
     const obj = {
-      id: p.id,         // ✅ einfach p.id, nicht nochmal Wingert dranhängen
-      wingert: p.wingert,
+      id: `${p.wingert}-${p.id}`, // ✅ eindeutig
+      wingert: p.wingert,         // ✅ speichern
       index: p.index,
       row: p.row,
       lat: p.lat,
@@ -342,7 +334,6 @@ async function saveInitial(points){
     await putStock(obj);
   }
 }
-
 
 
     async function refreshList(){
@@ -381,7 +372,7 @@ async function saveInitial(points){
 }
 
 async function focusStock(stock, openModal = true){
-  // 1. Wingert setzen
+  // 1. richtigen Wingert setzen
   if (stock.wingert && currentWingert !== stock.wingert){
     currentWingert = stock.wingert;
     const sel = document.getElementById('select-wingert');
@@ -403,10 +394,11 @@ async function focusStock(stock, openModal = true){
     }
   }, 50);
 
-  // 5. Modal öffnen
-  if (openModal) openDetail(stock);
+  // 5. Modal öffnen (optional)
+  if (openModal){
+    openDetail(stock);
+  }
 }
-
 
 
     // modal / detail
@@ -558,20 +550,10 @@ async function focusStock(stock, openModal = true){
   }
 
   const csv = rows.map(r =>
-  r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')
-).join('\n');
+    r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')
+  ).join('\n');
 
-// 📅 Datum YYYY-MM-DD
-const date = new Date().toISOString().slice(0, 10);
-
-// 🏷️ Dateiname aus aktuellem Wingert
-const filename =
-  currentWingert === 'ALL'
-    ? `alle-wingerte-${date}.csv`
-    : `${currentWingert}-${date}.csv`;
-
-downloadCSV(csv, filename);
-
+  downloadCSV(csv, 'reben_bonitur.csv');
 };
 
 function downloadCSV(text, name){
@@ -609,12 +591,11 @@ function refreshWingertSelect(wingerts){
   sel.innerHTML = '<option value="ALL">Alle Wingert</option>';
   wingerts.forEach(w => {
     const opt = document.createElement('option');
-    opt.value = w;         // ✅ nur Wingert-Name
+    opt.value = w;
     opt.textContent = w;
     sel.appendChild(opt);
   });
 }
-
 
 
 function parseDate(v){
@@ -644,8 +625,7 @@ async function importZip(file){
 
   for (const f of csvFiles){
     const text = await f.async('string');
-    await importCsvText(await file.text(), null, file.name);
-
+    await importCsvText(text, neueBegehung, f.name);
   }
 
   refreshList();
@@ -658,10 +638,6 @@ async function importCsvText(text, neueBegehungOverride = null, sourceName = '')
   const wingertName = sourceName.replace(/\.csv$/i, '');
 wingertsSet.add(wingertName);
 refreshWingertSelect([...wingertsSet]);
-const sel = document.getElementById('select-wingert');
-if(sel) sel.value = wingertName;
-
-refreshList();
 
   let neueBegehung = neueBegehungOverride;
   if (neueBegehung === null){
@@ -676,9 +652,9 @@ refreshList();
 
 
 
-    const stock = {
-  id: `${wingertName}-${cells[0]}`, // Wingert-R1-S3
-  wingert: wingertName,
+const stock = {
+  id: `${wingertName}-${cells[0]}`, // eindeutige ID inkl. Wingert
+  wingert: wingertName,            // CSV/ Wingert speichern
   row: parseInt(cells[1]),
   index: parseInt(cells[2]),
   lat: parseFloat(cells[3]),
