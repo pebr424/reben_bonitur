@@ -1,728 +1,1694 @@
-
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Reben-Bonitur (PWA Demo)</title>  
-  <!-- App-Modus aktivieren -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reben-Bonitur</title>
+<meta name="theme-color" content="#1f2d2b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bonitur">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="apple-touch-startup-image" href="splash.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* ---------- Farben & Grundwerte ---------- */
+:root{
+  --paper:#eef2ee; --surface:#ffffff; --surface-2:#e3e9e4; --ink:#17221f; --muted:#56655f; --line:#cdd7d0;
+  --bar:#1f2d2b; --on-bar:#f1f5f2;
+  --leaf:#2f6a1f; --on-leaf:#ffffff;
+  --gold:#f2b705; --grape:#6a2c5a; --danger:#b42318;
+  --float:0 4px 18px rgba(16,30,26,.22);
+  --font:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:#0f1513; --surface:#161f1c; --surface-2:#212c28; --ink:#e6eee9; --muted:#9aaba4; --line:#2e3b36;
+    --bar:#0a0f0e; --on-bar:#e6eee9;
+    --leaf:#7cc35a; --on-leaf:#0d1a09;
+    --gold:#f5c33b; --grape:#c27bb0; --danger:#ff7a6b;
+    --float:0 4px 18px rgba(0,0,0,.55);
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{margin:0;height:100%}
+body{background:var(--paper);color:var(--ink);font:16px/1.45 var(--font);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.muted{color:var(--muted)}
+.small{font-size:14px}
+.num{font-variant-numeric:tabular-nums}
 
-  <!-- App-Icons -->
-  <link rel="apple-touch-icon" href="icon-192.png">
+/* ---------- Gerüst ---------- */
+.app{height:100vh;height:100dvh;display:flex;flex-direction:column}
+.appbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;
+  padding:calc(env(safe-area-inset-top,0px) + 8px) calc(env(safe-area-inset-right,0px) + 12px) 8px calc(env(safe-area-inset-left,0px) + 12px);
+  background:var(--bar);color:var(--on-bar);z-index:1100}
+.brand{display:flex;align-items:center;gap:8px;margin-right:auto;font-weight:700;font-size:17px;white-space:nowrap;flex:none}
+.brand svg{flex:none}
+.appbar select{flex:1 1 140px;min-width:0;max-width:260px;min-height:38px;border-radius:10px;border:1.5px solid rgba(255,255,255,.28);background:rgba(255,255,255,.1);color:var(--on-bar);padding:4px 10px;font-weight:700}
+.appbar select option{color:#17221f;background:#fff}
+.bchip{display:flex;align-items:baseline;gap:8px;min-height:38px;border-radius:10px;border:1.5px dashed rgba(255,255,255,.4);background:none;color:var(--on-bar);padding:6px 10px;text-align:left}
+.bchip .bb-cnt{font-variant-numeric:tabular-nums;opacity:.8;font-size:14px}
+.main{flex:1;min-height:0;display:flex;flex-direction:column}
+.map-wrap{position:relative;flex:none;height:46%;min-height:220px}
+#map{position:absolute;inset:0;background:#c9d3c6}
+.leaflet-container{font:inherit}
+.leaflet-control-attribution{font-size:10.5px !important;line-height:1.4}
+.leaflet-container.picking{cursor:crosshair}
+@media (pointer:coarse){.leaflet-control-zoom{display:none}}
+@media (max-width:360px){.brand span{display:none}}
 
-  <!-- Splashscreen -->
-  <link rel="apple-touch-startup-image" href="splash.png">
+/* Karten-Bedienelemente */
+.map-ctrl{position:absolute;top:10px;right:10px;z-index:900;display:flex;flex-direction:column;gap:8px}
+.fab{width:46px;height:46px;border-radius:14px;border:0;background:var(--surface);color:var(--ink);box-shadow:var(--float);display:grid;place-items:center;padding:0}
+.fab svg{width:22px;height:22px}
+.fab.on{background:#1e6fd9;color:#fff}
+.fab.follow{box-shadow:0 0 0 3px #9cc4ff,var(--float)}
+.legend-box{position:absolute;left:10px;bottom:22px;z-index:900;background:var(--surface);border-radius:12px;box-shadow:var(--float);padding:6px 8px;display:flex;flex-direction:column;gap:6px;max-width:calc(100% - 76px)}
+.legend-box select{border:0;background:none;font-weight:700;padding:2px 0;font-size:15px}
+#legend{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:13px}
+#legend span{display:inline-flex;align-items:center;gap:4px}
+.dot{width:11px;height:11px;border-radius:50%;display:inline-block;border:1.5px solid rgba(0,0,0,.35)}
+.dot.done{background:var(--leaf);border-color:var(--leaf)}
+.dot.open{background:#fff;border-color:#1f2d2b}
+.dot.miss{background:#9aa39e;border-color:#5d6661}
+.pick-hint{position:absolute;top:10px;left:10px;right:66px;z-index:900;background:var(--grape);color:#fff;border-radius:12px;padding:10px 12px;font-weight:700;box-shadow:var(--float);display:flex;align-items:center;gap:10px}
+.pick-hint button{margin-left:auto;border:0;border-radius:8px;background:rgba(255,255,255,.2);color:#fff;padding:6px 10px;font-weight:700}
 
-  <style>
-    body { margin:0; font-family:system-ui, -apple-system,Segoe UI, Roboto, "Helvetica Neue", Arial; }
-    #map { height:55vh; }
-    .toolbar { padding:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    .panel { padding:8px; }
-    .point { cursor:pointer; padding:6px; border-bottom:1px solid #eee; }
-    input, button, select, textarea { font:inherit; padding:6px; }
-    .photo-thumb { max-width:100px; max-height:80px; margin:4px; }
-    .small { font-size:0.9rem; }
-    .point.highlight {
-    background-color: #ffeb3b !important;
-    border-left: 6px solid #f59e0b;
-    padding-left: 6px;
-    transition: background-color 0.2s ease;
-    }
-  </style>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+/* Panel & Tabs */
+.panel{flex:1;min-height:0;overflow:auto;background:var(--surface);border-top:1px solid var(--line);padding-bottom:calc(env(safe-area-inset-bottom,0px) + 20px)}
+.tabs{position:sticky;top:0;z-index:5;display:flex;background:var(--surface);border-bottom:1px solid var(--line)}
+.tabs button{flex:1;border:0;background:none;padding:13px 8px 11px;font-weight:700;color:var(--muted);border-bottom:3px solid transparent}
+.tabs button.active{color:var(--ink);border-bottom-color:var(--leaf)}
+.tab{padding:12px 14px}
+.tab h3{font-size:17px;margin:18px 0 6px}
+.tab h3:first-child{margin-top:4px}
+.hint{margin:0 0 12px;color:var(--muted);font-size:15px;max-width:60ch}
+
+/* Buttons & Felder */
+.btn{min-height:44px;padding:8px 14px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface-2);font-weight:700;line-height:1.15}
+.btn.primary{background:var(--leaf);border-color:var(--leaf);color:var(--on-leaf)}
+.btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+.btn.danger-line{background:none;border-color:var(--danger);color:var(--danger)}
+.btn.sm{min-height:36px;padding:4px 10px;font-size:14px}
+.btn:disabled{opacity:.45;cursor:default}
+.link{border:0;background:none;color:var(--leaf);font-weight:700;padding:8px 0}
+.link.danger{color:var(--danger)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.field{display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--muted)}
+.field input,.field select,.field textarea{font-size:16px;color:var(--ink);background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:9px 10px;min-height:44px;width:100%}
+.field textarea{resize:vertical;min-height:56px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:15px;padding:6px 0}
+.check input{width:20px;height:20px;margin-top:1px;accent-color:var(--leaf)}
+
+/* Reihen-Liste */
+.jump{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:10px}
+.jump input{font-size:16px;min-height:44px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);padding:8px 10px;width:100%}
+.summary{font-size:15px;color:var(--muted);margin:2px 0 8px}
+.summary b{color:var(--ink)}
+.bar{height:7px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--leaf)}
+.row{border-bottom:1px solid var(--line)}
+.row-h{width:100%;display:grid;grid-template-columns:56px 1fr auto 16px;align-items:center;gap:10px;padding:11px 2px;border:0;background:none;text-align:left}
+.row-n{font-weight:700;font-variant-numeric:tabular-nums}
+.row-c{font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.chev{color:var(--muted);transition:transform .15s;font-weight:700}
+.row.open .chev{transform:rotate(90deg)}
+.row.cur .row-n{color:var(--leaf)}
+/* Die Stöcke einer Reihe als Streifen – wie von oben auf die Zeile geschaut */
+.chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(42px,1fr));gap:4px;padding:4px 0 6px}
+.chip{position:relative;height:38px;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;padding:0}
+.chip.done{background:var(--leaf);border-color:var(--leaf);color:var(--on-leaf)}
+.chip.val{background:var(--c);border-color:var(--c);color:var(--t)}
+.chip.miss{background:repeating-linear-gradient(45deg,var(--surface-2) 0 4px,var(--surface) 4px 8px);color:var(--muted);text-decoration:line-through}
+.chip.sel{outline:3px solid var(--gold);outline-offset:1px;z-index:1}
+.chip.ph::after{content:"";position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:#1e6fd9;box-shadow:0 0 0 1.5px var(--surface)}
+.row-foot{display:flex;gap:18px;padding:0 0 8px}
+.wcard{width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:none;padding:14px 2px;display:flex;flex-direction:column;gap:7px}
+.wcard-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.wcard-top b{font-size:18px}
+.empty{padding:24px 4px;max-width:46ch}
+.empty p{margin:0 0 14px;color:var(--muted)}
+
+/* Anlegen */
+.ab{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.ab-row{display:grid;grid-template-columns:28px 1fr auto auto;align-items:center;gap:8px}
+.ab-badge{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700;color:#fff;background:var(--grape)}
+.ab-badge.b{background:#2f6a1f}
+.gen-sum{margin-top:14px;padding:12px;border-radius:10px;background:var(--surface-2);font-size:15px}
+.warn{color:var(--danger);font-weight:700;margin-top:6px}
+
+/* Daten */
+.data-sec{padding-bottom:14px;border-bottom:1px solid var(--line)}
+.data-sec:last-child{border-bottom:0}
+.stat{font-variant-numeric:tabular-nums}
+
+/* ---------- Bewertungs-Blatt ---------- */
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:1200;background:var(--surface);border-radius:18px 18px 0 0;
+  box-shadow:0 -10px 34px rgba(0,0,0,.28);max-height:74vh;max-height:74dvh;display:flex;flex-direction:column;
+  transform:translateY(105%);transition:transform .22s ease;padding-bottom:env(safe-area-inset-bottom,0px)}
+.sheet.open{transform:none}
+.sheet::before{content:"";width:40px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 0;flex:none}
+.sheet-head{display:flex;align-items:flex-start;gap:8px;padding:6px 14px 4px}
+.sheet-head h2{margin:0;font-size:22px;line-height:1.2}
+.sheet-sub{font-size:14px;color:var(--muted)}
+.icon-btn{margin-left:auto;width:42px;height:42px;border-radius:12px;border:0;background:var(--surface-2);font-size:20px;flex:none}
+.sheet-body{overflow:auto;padding:6px 14px 10px;display:flex;flex-direction:column;gap:10px}
+.crit{display:grid;grid-template-columns:96px 1fr;align-items:center;gap:8px}
+.crit-l{display:flex;flex-direction:column;line-height:1.15}
+.crit-l small{color:var(--muted);font-size:13px}
+.seg{display:grid;grid-template-columns:repeat(var(--n,5),1fr);gap:6px}
+.seg button{height:46px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface-2);font-weight:700;font-size:18px;font-variant-numeric:tabular-nums;padding:0;transition:transform .07s}
+.seg button:active{transform:scale(.93)}
+.seg button.on{background:var(--c);border-color:var(--c);color:var(--t)}
+.seg button.was{box-shadow:inset 0 -4px 0 var(--c)}
+.sheet-row{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.switch{display:flex;align-items:center;gap:10px;font-weight:700}
+.switch input{width:22px;height:22px;accent-color:var(--danger)}
+.thumbs{display:flex;gap:8px;overflow-x:auto}
+.thumbs:empty{display:none}
+.thumb{flex:none;border:0;padding:0;background:none;display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted)}
+.thumb img{width:76px;height:76px;object-fit:cover;border-radius:8px;display:block}
+.sheet-foot{display:grid;grid-template-columns:1fr auto 1.6fr;gap:8px;padding:10px 14px;border-top:1px solid var(--line)}
+.sheet-foot .btn{display:flex;flex-direction:column;align-items:center;justify-content:center}
+.sheet-foot small{font-weight:400;font-size:12.5px;opacity:.85;font-variant-numeric:tabular-nums}
+.saved{font-size:13px;color:var(--muted);min-height:1em}
+
+/* Dialog, Toast, Foto-Ansicht */
+dialog{border:0;border-radius:16px;padding:0;width:min(440px,calc(100vw - 28px));background:var(--surface);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.4)}
+dialog::backdrop{background:rgba(10,20,16,.5)}
+dialog form{padding:18px}
+dialog h3{margin:0 0 10px;font-size:20px}
+dialog p{margin:0 0 6px;max-width:60ch}
+.dlg-foot{display:flex;flex-direction:row-reverse;flex-wrap:wrap;gap:8px;margin-top:16px}
+.blist{display:flex;flex-direction:column;gap:6px;max-height:48vh;overflow:auto}
+.bitem{display:flex;gap:10px;align-items:center;padding:10px;border:1.5px solid var(--line);border-radius:10px;cursor:pointer}
+.bitem input{width:20px;height:20px;accent-color:var(--leaf)}
+.bitem:has(input:checked){border-color:var(--leaf)}
+.bitem span{display:flex;flex-direction:column}
+.bitem small{color:var(--muted)}
+.toast{position:fixed;left:50%;top:calc(var(--hdr,56px) + 10px);transform:translate(-50%,-8px);z-index:2500;background:#22302d;color:#fff;padding:11px 15px;border-radius:12px;font-size:15px;box-shadow:var(--float);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:calc(100vw - 28px);text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.lightbox{position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.94);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 12px) 12px calc(env(safe-area-inset-bottom,0px) + 12px)}
+.lightbox img{max-width:100%;max-height:78vh;object-fit:contain;border-radius:6px}
+.lightbox .actions{margin:0}
+
+/* Kartensymbole */
+.gps-dot{width:18px;height:18px;border-radius:50%;background:#1e6fd9;border:3px solid #fff;box-shadow:0 0 0 4px rgba(30,111,217,.25),0 1px 4px rgba(0,0,0,.4)}
+.rlabel{display:inline-block;transform:translate(-50%,-50%);background:rgba(255,255,255,.92);color:#1f2d2b;font:700 11px/1 var(--font);padding:3px 5px;border-radius:4px;white-space:nowrap}
+
+/* ---------- Breite Bildschirme ---------- */
+@media (min-width:900px){
+  .main{flex-direction:row}
+  .map-wrap{height:auto;flex:1}
+  .panel{flex:none;width:430px;border-top:0;border-left:1px solid var(--line)}
+  .sheet{left:auto;top:var(--hdr,56px);width:430px;max-height:none;border-radius:0;transform:translateX(105%);box-shadow:-10px 0 34px rgba(0,0,0,.2)}
+  .sheet.open{transform:none}
+  .sheet::before{display:none}
+  .sheet-head{padding-top:14px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
 </head>
 <body>
-    <div id="top-bar" style="position:fixed; top:0; left:0; right:0; background:#fff; padding:6px 12px; border-bottom:1px solid #ccc; z-index:1000; display:flex; gap:8px;">
-        <button id="btn-top">Top</button>
-        <select id="select-wingert">
-          <option value="ALL">Alle Wingert</option>
-        </select>
-        <button id="btn-row">Reihe</button>
-        <button id="btn-stock">Stock</button>
-      </div>
-      <div style="height:50px;"></div> <!-- Platzhalter, damit die Toolbar den Inhalt nicht überlappt -->
-  <div class="toolbar">
-    <button id="btn-set-row">Reihe setzen (2 Punkte)</button>
-    <label class="small">Stock-Abstand (m): <input id="input-spacing" type="number" value="1" min="0.1" step="0.1" style="width:70px"></label>
-    <label class="small">Reihenabstand (m): <input id="input-rowspacing" type="number" value="2" min="0.1" step="0.1" style="width:70px"></label>
-    <label class="small">Richtung: 
-      <select id="select-dir"><option value="right">rechts</option><option value="left">links</option><option value="both">beide</option></select>
-    </label>
-    <button id="btn-generate">Stöcke generieren</button>
-    <button id="btn-export">Export CSV</button>
-    <button id="btn-import">Import CSV</button>
-    <button id="btn-clear">DB löschen</button>
-    <button id="btn-locate">📍 Mein Standort</button>
-    <span id="status"></span>
-  </div>
-  <input id="csv-file" type="file" accept=".csv,.zip" style="display:none">
-  <div id="map"></div>
-  <div class="panel">
-    <h3>Liste (tippe Punkt auf Karte oder hier)</h3>
-    <div id="list"></div>
-  </div>
- 
-  
-
-  <!-- Detail Modal -->
-  <div id="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); align-items:center; justify-content:center;">
-    <div style="background:#fff; padding:12px; width:92%; max-width:480px; border-radius:8px;">
-      <h3 id="modal-title">Stock</h3>
-      <div id="modal-body"></div>
-      <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
-        <button id="btn-save">Speichern</button>
-        <button id="btn-close">Schließen</button>
-      </div>
+<div class="app">
+  <header class="appbar" id="appbar">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.2c0-2 .8-3.4 2.6-4.2" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><g fill="var(--gold)"><circle cx="7.2" cy="9" r="2.6"/><circle cx="12" cy="9" r="2.6"/><circle cx="16.8" cy="9" r="2.6"/><circle cx="9.6" cy="13.4" r="2.6"/><circle cx="14.4" cy="13.4" r="2.6"/><circle cx="12" cy="17.8" r="2.6"/></g></svg>
+      <span>Reben-Bonitur</span>
     </div>
+    <select id="sel-wingert" aria-label="Wingert wählen"></select>
+    <button id="btn-begehung" class="bchip" hidden title="Begehung wechseln oder neu anlegen"></button>
+  </header>
+
+  <div class="main">
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div class="map-ctrl">
+        <button class="fab" id="btn-layer" title="Satellit / Karte" aria-label="Kartenhintergrund wechseln">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/></svg>
+        </button>
+        <button class="fab" id="btn-locate" title="Standort anzeigen und mitführen" aria-label="Standort">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3"/></svg>
+        </button>
+        <button class="fab" id="btn-nearest" title="Stock an meinem Standort öffnen" aria-label="Nächsten Stock öffnen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 21.5s-6.5-6-6.5-11.5a6.5 6.5 0 0 1 13 0c0 5.5-6.5 11.5-6.5 11.5Z"/><circle cx="12" cy="10" r="2.3"/></svg>
+        </button>
+        <button class="fab" id="btn-fit" title="Ganzen Wingert zeigen" aria-label="Auf Wingert zoomen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        </button>
+      </div>
+      <div class="legend-box">
+        <select id="sel-color" aria-label="Stöcke einfärben nach"></select>
+        <div id="legend"></div>
+      </div>
+      <div class="pick-hint" id="pick-hint" hidden><span id="pick-text"></span><button id="pick-cancel">Abbrechen</button></div>
+    </div>
+
+    <section class="panel" id="panel">
+      <nav class="tabs" role="tablist">
+        <button data-tab="rows" class="active" role="tab">Reihen</button>
+        <button data-tab="gen" role="tab">Anlegen</button>
+        <button data-tab="data" role="tab">Daten</button>
+      </nav>
+
+      <!-- Reihen -->
+      <div class="tab" id="tab-rows">
+        <div class="jump" id="jump">
+          <input id="j-row" type="number" inputmode="numeric" min="1" placeholder="Reihe" aria-label="Reihe">
+          <input id="j-stock" type="number" inputmode="numeric" min="1" placeholder="Stock" aria-label="Stock">
+          <button class="btn" id="j-go">Öffnen</button>
+        </div>
+        <div id="rows-summary"></div>
+        <div id="rows"></div>
+      </div>
+
+      <!-- Anlegen -->
+      <div class="tab" id="tab-gen" hidden>
+        <p class="hint">Lege die erste Reihe über ihren ersten Stock (A) und letzten Stock (B) fest. Am besten stellst du dich an den Stock und nimmst GPS – oder du tippst auf die Satellitenkarte. Beide Punkte lassen sich danach noch ziehen.</p>
+        <label class="field"><span>Wingert</span><input id="g-wingert" list="dl-wingerte" placeholder="z. B. Kirchberg" autocomplete="off"></label>
+        <datalist id="dl-wingerte"></datalist>
+        <div class="ab">
+          <div class="ab-row"><span class="ab-badge">A</span><span id="g-a-txt" class="small muted">nicht gesetzt</span><button class="btn sm" data-pick="A">Karte</button><button class="btn sm" data-gps="A">GPS</button></div>
+          <div class="ab-row"><span class="ab-badge b">B</span><span id="g-b-txt" class="small muted">nicht gesetzt</span><button class="btn sm" data-pick="B">Karte</button><button class="btn sm" data-gps="B">GPS</button></div>
+        </div>
+        <div class="grid2">
+          <label class="field"><span>Stockabstand (m)</span><input id="g-spacing" type="number" step="0.05" min="0.3" value="1" inputmode="decimal"></label>
+          <label class="field"><span>Reihenabstand (m)</span><input id="g-rowsp" type="number" step="0.05" min="0.5" value="2" inputmode="decimal"></label>
+          <label class="field"><span>Weitere Reihen links</span><input id="g-left" type="number" min="0" value="0" inputmode="numeric"></label>
+          <label class="field"><span>Weitere Reihen rechts</span><input id="g-right" type="number" min="0" value="0" inputmode="numeric"></label>
+          <label class="field"><span>Erste Reihennummer</span><input id="g-start" type="number" min="1" value="1" inputmode="numeric"></label>
+          <label class="field"><span>Nummerierung</span><select id="g-order"><option value="lr">von links</option><option value="rl">von rechts</option></select></label>
+        </div>
+        <p class="small muted">Links und rechts gelten mit Blick von A nach B. Stock 1 steht immer bei A.</p>
+        <div class="gen-sum" id="g-summary"></div>
+        <div class="actions">
+          <button class="btn primary" id="g-create" disabled>Stöcke anlegen</button>
+          <button class="btn" id="g-reset">Punkte zurücksetzen</button>
+        </div>
+      </div>
+
+      <!-- Daten -->
+      <div class="tab" id="tab-data" hidden>
+        <div class="data-sec">
+          <h3>Exportieren</h3>
+          <p class="hint" id="exp-scope"></p>
+          <div class="actions">
+            <button class="btn primary" id="x-csv">CSV für Excel</button>
+            <button class="btn" id="x-backup">Backup mit Fotos (ZIP)</button>
+          </div>
+        </div>
+        <div class="data-sec">
+          <h3>Importieren</h3>
+          <p class="hint">CSV-Dateien (auch aus der alten Version), ein ZIP mit mehreren CSVs oder ein Backup. Vorhandene Stöcke werden ergänzt, gelöscht wird nichts.</p>
+          <button class="btn" id="i-file">Datei auswählen</button>
+        </div>
+        <div class="data-sec" id="w-sec">
+          <h3 id="w-sec-title">Wingert</h3>
+          <div class="actions">
+            <button class="btn" id="w-rename">Umbenennen</button>
+            <button class="btn danger-line" id="w-delete">Wingert löschen</button>
+          </div>
+        </div>
+        <div class="data-sec">
+          <h3>Laufweg</h3>
+          <label class="check"><input type="checkbox" id="opt-serp"><span>Am Reihenende in der nächsten Reihe vom selben Ende aus weitermachen (Schlangenlinie)</span></label>
+        </div>
+        <div class="data-sec">
+          <h3>Speicher</h3>
+          <p class="hint" id="storage-info"></p>
+          <button class="btn danger-line" id="d-all">Alle Daten löschen</button>
+        </div>
+      </div>
+    </section>
   </div>
- 
-  
+</div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<!-- Bewertungs-Blatt -->
+<aside class="sheet" id="sheet" hidden aria-labelledby="sheet-title">
+  <div class="sheet-head">
+    <div>
+      <div class="sheet-sub" id="sheet-sub"></div>
+      <h2 id="sheet-title"></h2>
+      <div class="saved" id="sheet-saved"></div>
+    </div>
+    <button class="icon-btn" id="sheet-close" aria-label="Schließen">✕</button>
+  </div>
+  <div class="sheet-body" id="sheet-body"></div>
+  <div class="sheet-foot">
+    <button class="btn" id="sheet-prev"></button>
+    <button class="btn" id="sheet-flip" title="Laufrichtung umkehren" aria-label="Laufrichtung umkehren">⇄</button>
+    <button class="btn primary" id="sheet-next"></button>
+  </div>
+</aside>
 
-  <script>
-   
-   let currentWingert = 'ALL';
-const wingertsSet = new Set();
+<div class="lightbox" id="lightbox" hidden>
+  <img alt="Foto des Stocks">
+  <div class="small" id="lb-cap"></div>
+  <div class="actions"><button class="btn danger-line" id="lb-del">Foto löschen</button><button class="btn" id="lb-close">Schließen</button></div>
+</div>
+<dialog id="dlg"></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="file-import" accept=".csv,.zip,text/csv,application/zip" hidden>
+<input type="file" id="file-photo" accept="image/*" hidden>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+'use strict';
+/* =====================================================================
+   Konfiguration – hier lassen sich Kriterien und Skala anpassen
+   ===================================================================== */
+const KRITERIEN = [
+  { key: 'wuchs',  label: 'Wuchs' },
+  { key: 'gesund', label: 'Gesundheit' },
+  { key: 'reife',  label: 'Reife' },
+];
+const SKALA = { min: 1, max: 5 };
+const SKALA_FARBEN = ['#b3261e', '#e0701b', '#e9b10c', '#6aa531', '#2d6b1f']; // niedrig … hoch
 
-    let highlightedId = null;
-    // --- IndexedDB Wrapper ---
-    const DB_NAME = 'reben-bonitur-v1';
-    const STORE = 'stocks';
-    function openDB(){
-      return new Promise((res,rej)=>{
-        const r = indexedDB.open(DB_NAME,1);
-        r.onupgradeneeded = e => { const db = e.target.result; if(!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE,{keyPath:'id'}); };
-        r.onsuccess = e => res(e.target.result);
-        r.onerror = e => rej(e.target.error);
-      });
-    }
-    async function putStock(obj){ const db = await openDB(); const tx = db.transaction(STORE,'readwrite'); tx.objectStore(STORE).put(obj); return new Promise((r,rej)=>{tx.oncomplete=r;tx.onerror=rej}); }
-    async function getAll(){ const db = await openDB(); return new Promise((res,rej)=>{ const tx = db.transaction(STORE,'readonly'); const req = tx.objectStore(STORE).getAll(); req.onsuccess = ()=>res(req.result); req.onerror = ()=>rej(req.error); }); }
-    async function clearAll(){ const db = await openDB(); const tx = db.transaction(STORE,'readwrite'); tx.objectStore(STORE).clear(); return new Promise((r,rej)=>{tx.oncomplete=r;tx.onerror=rej}); }
+/* =====================================================================
+   Kleine Helfer
+   ===================================================================== */
+const $  = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const skey = (w, r, i) => `${w}|${r}|${i}`;
+const fmtDate = d => new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const fmtTime = d => new Date(d).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+const fmtNum = (n, d = 0) => Number(n).toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+const isoDate = () => new Date().toISOString().slice(0, 10);
+const safeName = s => String(s).replace(/[^\wäöüÄÖÜß.-]+/g, '_').replace(/^_+|_+$/g, '') || 'wingert';
+const range = () => { const a = []; for (let v = SKALA.min; v <= SKALA.max; v++) a.push(v); return a; };
+const intOr = (v, d) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : d; };
+const numOr = (v, d) => { const n = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : d; };
 
-    // --- Map Setup ---
-    const map = L.map('map').setView([48.0, 8.0], 16);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:30}).addTo(map);
-    let userLocationMarker = null;
-    let userLocationCircle = null;
-
-    document.getElementById('btn-locate').onclick = ()=>{
-  if(!navigator.geolocation){
-    alert('Geolocation wird von diesem Gerät nicht unterstützt');
-    return;
-  }
-
-  setStatus('Standort wird ermittelt…');
-
-  navigator.geolocation.getCurrentPosition(
-    (pos)=>{
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-      const acc = pos.coords.accuracy;
-
-      // alte Marker entfernen
-      if(userLocationMarker) map.removeLayer(userLocationMarker);
-      if(userLocationCircle) map.removeLayer(userLocationCircle);
-
-      // Marker setzen
-      userLocationMarker = L.marker([lat, lon], {
-        title: 'Mein Standort'
-      }).addTo(map);
-
-      // Genauigkeitskreis
-      userLocationCircle = L.circle([lat, lon], {
-        radius: acc
-      }).addTo(map);
-
-      // Karte zentrieren
-      map.setView([lat, lon], 18);
-
-      setStatus(`Standort gefunden (±${Math.round(acc)} m)`);
-    },
-    (err)=>{
-      console.error(err);
-      alert('Standort konnte nicht ermittelt werden');
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0
-    }
-  );
-};
-
-
-    let tempMarkers = [];
-    let generatedPoints = [];
-    const markersLayer = L.layerGroup().addTo(map);
-
-    document.getElementById('btn-top').onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
-
-document.getElementById('btn-row').onclick = async () => {
-  const rowNum = parseInt(prompt('Welche Reihe?'));
-  if(isNaN(rowNum)) return;
-
-  const all = await getAll();
-  const record = all.find(r => (currentWingert === 'ALL' || r.wingert === currentWingert) && r.row === rowNum);
-  if(!record){ alert('Reihe nicht gefunden'); return; }
-
-  document.getElementById(`list-${record.id}`).scrollIntoView({ behavior:'smooth', block:'center' });
-  highlightedId = record.id;
-  refreshList();
-};
-
-document.getElementById('btn-stock').onclick = async () => {
-  const rowNum = parseInt(prompt('Reihe des Stocks?'));
-  if(isNaN(rowNum)) return;
-  const stockNum = parseInt(prompt('Stocknummer?'));
-  if(isNaN(stockNum)) return;
-
-  const all = await getAll();
-  const record = all.find(r => (currentWingert === 'ALL' || r.wingert === currentWingert) && r.row === rowNum && r.index === stockNum);
-  if(!record){ alert('Stock nicht gefunden'); return; }
-
-  document.getElementById(`list-${record.id}`).scrollIntoView({ behavior:'smooth', block:'center' });
-  highlightedId = record.id;
-  openDetail(record);
-  refreshList();
-};
-
-
-    document.getElementById('btn-set-row').onclick = ()=>{
-      tempMarkers.forEach(m=>map.removeLayer(m)); tempMarkers = [];
-      map.once('click', e=>{
-        const m1 = L.marker(e.latlng).addTo(map); tempMarkers.push(m1);
-        map.once('click', e2=>{
-          const m2 = L.marker(e2.latlng).addTo(map); tempMarkers.push(m2);
-          const poly = L.polyline([m1.getLatLng(), m2.getLatLng()]).addTo(map);
-          tempMarkers.push(poly);
-          setStatus('Punkte gesetzt. Jetzt auf "Stöcke generieren" klicken.');
-        });
-      });
-      setStatus('Klicke zwei Punkte auf der Karte, um die Reihe zu definieren.');
-    };
-
-    function setStatus(s){ document.getElementById('status').textContent = s; setTimeout(()=>{ if(document.getElementById('status').textContent===s) document.getElementById('status').textContent=''; },4000); }
-
-    function toRad(d){ return d*Math.PI/180; }
-    function toDeg(d){ return d*180/Math.PI; }
-
-    function destPoint(lat, lon, bearingDeg, distMeters){
-      const R = 6378137.0;
-      const br = toRad(bearingDeg);
-      const lat1 = toRad(lat), lon1 = toRad(lon);
-      const dR = distMeters / R;
-      const lat2 = Math.asin(Math.sin(lat1)*Math.cos(dR) + Math.cos(lat1)*Math.sin(dR)*Math.cos(br));
-      const lon2 = lon1 + Math.atan2(Math.sin(br)*Math.sin(dR)*Math.cos(lat1), Math.cos(dR)-Math.sin(lat1)*Math.sin(lat2));
-      return [toDeg(lat2), toDeg(lon2)];
-    }
-
-    function bearingBetween(a,b){
-      const lat1 = toRad(a.lat), lat2 = toRad(b.lat); const dLon = toRad(b.lng-a.lng);
-      const y = Math.sin(dLon)*Math.cos(lat2);
-      const x = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon);
-      return (toDeg(Math.atan2(y,x))+360)%360;
-    }
-
-    // --- Utility: offset point perpendicular by meters (approx) ---
-    function offsetPoint(lat, lng, bearingDeg, offsetMeters){
-      // Move perpendicular (bearing+90) by offsetMeters
-      const perp = (bearingDeg + 90) % 360;
-      return destPoint(lat, lng, perp, offsetMeters);
-    }
-
-    // --- Generate stocks for base row + parallels ---
-    document.getElementById('btn-generate').onclick = async ()=> {
-
-let wingertName = prompt('Name des Wingerts?');
-if (!wingertName) {
-  setStatus('Generieren abgebrochen (kein Wingert-Name)');
-  return;
+function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function valColor(v) {
+  const t = (v - SKALA.min) / Math.max(1, SKALA.max - SKALA.min) * (SKALA_FARBEN.length - 1);
+  const i = Math.min(SKALA_FARBEN.length - 2, Math.max(0, Math.floor(t))), f = t - i;
+  const a = hexRgb(SKALA_FARBEN[i]), b = hexRgb(SKALA_FARBEN[i + 1]);
+  return '#' + a.map((x, k) => Math.round(x + (b[k] - x) * f).toString(16).padStart(2, '0')).join('');
 }
-wingertName = wingertName.trim();
+function valText(v) { const [r, g, b] = hexRgb(valColor(v)); return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#1a1a1a' : '#ffffff'; }
 
-wingertsSet.add(wingertName);
-refreshWingertSelect([...wingertsSet]);
-currentWingert = wingertName;
-document.getElementById('select-wingert').value = wingertName;
-localStorage.setItem('lastWingert', wingertName);
+const prefs = {
+  get(k, d) { try { const v = localStorage.getItem('rb.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('rb.' + k, JSON.stringify(v)); } catch { /* egal */ } },
+};
 
+function parseDate(v) {
+  if (!v) return null;
+  const s = String(v).trim();
+  const m = /^(\d{1,2})\.(\d{1,2})\.(\d{2,4})/.exec(s);
+  if (m) { let y = +m[3]; if (y < 100) y += 2000; return new Date(y, +m[2] - 1, +m[1], 12); }
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
 
-  const pts = tempMarkers.filter(p=>p instanceof L.Marker).map(m=>m.getLatLng());
-  if(pts.length < 2){
-    setStatus('Bitte zuerst zwei Punkte setzen.');
-    return;
-  }
-
-  const baseStart = pts[0];
-  const baseEnd   = pts[1];
-  const spacing = parseFloat(document.getElementById('input-spacing').value) || 1;
-  const rowSpacing = parseFloat(document.getElementById('input-rowspacing').value) || 2;
-  const dir = document.getElementById('select-dir').value;
-  const numExtra = parseInt(prompt('Wieviele zusätzliche parallele Reihen? (0 = nur diese)') || 0);
-
-  const allRows = [];
-  allRows.push({start:baseStart, end:baseEnd});
-
-  const bearingBase = bearingBetween(baseStart, baseEnd);
-
-  function pushOffset(i, side){
-    const off = rowSpacing * i * side;
-    const p1 = offsetPoint(baseStart.lat, baseStart.lng, bearingBase, off);
-    const p2 = offsetPoint(baseEnd.lat, baseEnd.lng, bearingBase, off);
-    allRows.push({
-      start:{lat:p1[0], lng:p1[1]},
-      end:{lat:p2[0], lng:p2[1]}
+/* =====================================================================
+   Datenbank (IndexedDB) – gleicher Name wie die alte Version,
+   damit vorhandene Daten erhalten bleiben und übernommen werden.
+   ===================================================================== */
+const DB_NAME = 'reben-bonitur-v1', DB_VER = 2;
+let dbPromise = null;
+function db() {
+  if (!dbPromise) dbPromise = new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, DB_VER);
+    r.onupgradeneeded = () => {
+      const d = r.result;
+      if (!d.objectStoreNames.contains('stocks')) d.createObjectStore('stocks', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('wingerts')) d.createObjectStore('wingerts', { keyPath: 'name' });
+      if (!d.objectStoreNames.contains('photos')) d.createObjectStore('photos', { keyPath: 'id' }).createIndex('stockId', 'stockId');
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+    r.onblocked = () => toast('Bitte andere offene Tabs dieser App schließen.', 6000);
+  });
+  return dbPromise;
+}
+const reqP = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+async function tx(stores, fn) {
+  const d = await db();
+  return new Promise((res, rej) => {
+    const t = d.transaction(stores, 'readwrite');
+    t.oncomplete = () => res();
+    t.onerror = () => rej(t.error);
+    t.onabort = () => rej(t.error || new Error('Speichern abgebrochen (Speicher voll?)'));
+    fn(t);
+  });
+}
+const DB = {
+  async all(store) { const d = await db(); return reqP(d.transaction(store).objectStore(store).getAll()); },
+  async get(store, key) { const d = await db(); return reqP(d.transaction(store).objectStore(store).get(key)); },
+  put(store, items) { items = [].concat(items); return items.length ? tx(store, t => { const os = t.objectStore(store); items.forEach(i => os.put(i)); }) : Promise.resolve(); },
+  del(store, keys) { keys = [].concat(keys); return keys.length ? tx(store, t => { const os = t.objectStore(store); keys.forEach(k => os.delete(k)); }) : Promise.resolve(); },
+  clear(stores) { return tx(stores, t => stores.forEach(s => t.objectStore(s).clear())); },
+  async photosOf(stockId) { const d = await db(); return reqP(d.transaction('photos').objectStore('photos').index('stockId').getAll(stockId)); },
+  // Nur die Schlüssel lesen (schnell, ohne Bilddaten): stockId -> [photoId]
+  async photoIndex() {
+    const d = await db();
+    return new Promise((res, rej) => {
+      const m = new Map();
+      const r = d.transaction('photos').objectStore('photos').index('stockId').openKeyCursor();
+      r.onsuccess = () => { const c = r.result; if (c) { if (!m.has(c.key)) m.set(c.key, []); m.get(c.key).push(c.primaryKey); c.continue(); } else res(m); };
+      r.onerror = () => rej(r.error);
     });
-  }
-
-  for(let i=1;i<=numExtra;i++){
-    if(dir==='right' || dir==='both') pushOffset(i, +1);
-    if(dir==='left'  || dir==='both') pushOffset(i, -1);
-  }
-
-  generatedPoints = [];
-  markersLayer.clearLayers();
-
-  for(let rIndex=0; rIndex<allRows.length; rIndex++){
-    const row = allRows[rIndex];
-    const b = bearingBetween(row.start, row.end);
-    const distTotal = map.distance(row.start, row.end);
-    const count = Math.max(1, Math.round(distTotal / spacing) + 1);
-
-    for(let i=0; i<count; i++){
-      const d = i * spacing;
-      const [lat,lon] = destPoint(row.start.lat, row.start.lng, b, d);
-      const id = `R${rIndex+1}-S${i+1}`;
-
-      const marker = L.circleMarker([lat,lon], {radius:6}).addTo(markersLayer);
-      marker.__meta = {id, row:rIndex+1, index:i+1, lat, lon,wingert: wingertName};
-
-    marker.on('click', () => focusStock(marker.__meta, true));
-
-
-
-
-      generatedPoints.push(marker.__meta);
-    }
-  }
-
-  await saveInitial(generatedPoints);
-  refreshList();
-  setStatus(`Generiert ${generatedPoints.length} Stöcke`);
+  },
 };
 
+/* =====================================================================
+   Zustand im Speicher (alles wird einmal geladen, danach schnell)
+   ===================================================================== */
+const S = {
+  stocks: new Map(),     // id -> Stock
+  byKey: new Map(),      // "Wingert|Reihe|Stock" -> Stock
+  wingerts: new Map(),   // Name -> Wingert
+  photos: new Map(),     // stockId -> [photoId]
+  current: 'ALL',
+  colorMode: prefs.get('colorMode', 'status'),
+  base: prefs.get('base', 'sat'),
+  serp: prefs.get('serp', true),
+  selectedId: null,
+  expanded: new Set(),
+  walkDir: 1,
+  pos: null,
+};
+function indexStock(s) { S.stocks.set(s.id, s); S.byKey.set(skey(s.wingert, s.row, s.index), s); }
+function unindexStock(s) { S.stocks.delete(s.id); S.byKey.delete(skey(s.wingert, s.row, s.index)); }
+const stocksOf = wn => { const a = []; for (const s of S.stocks.values()) if (s.wingert === wn) a.push(s); return a; };
+const inScope = s => S.current === 'ALL' || s.wingert === S.current;
+function rowsOf(wn) { return [...new Set(stocksOf(wn).map(s => s.row))].sort((a, b) => a - b); }
+function rowStocks(wn, row) { return stocksOf(wn).filter(s => s.row === row).sort((a, b) => a.index - b.index); }
 
-async function saveInitial(points){
-  for(const p of points){
-    const obj = {
-      id: `${p.wingert}-${p.id}`, // ✅ eindeutig
-      wingert: p.wingert,         // ✅ speichern
-      index: p.index,
-      row: p.row,
-      lat: p.lat,
-      lon: p.lon,
-      photos: [],
-      lasts: [],
-      created: new Date().toISOString()
-    };
-    await putStock(obj);
+function newBegehung(name, date) { const d = date ? new Date(date) : new Date(); return { id: uid('b'), name: name || `Begehung ${fmtDate(d)}`, date: d.toISOString() }; }
+function makeWingert(name) { const b = newBegehung(); return { name, created: new Date().toISOString(), begehungen: [b], activeBid: b.id }; }
+function activeB(w) {
+  if (typeof w === 'string') w = S.wingerts.get(w);
+  if (!w || !w.begehungen.length) return null;
+  return w.begehungen.find(b => b.id === w.activeBid) || w.begehungen[w.begehungen.length - 1];
+}
+const ratingOf = s => { const b = activeB(s.wingert); return b ? s.ratings?.[b.id] : undefined; };
+function prevRating(s) {
+  const w = S.wingerts.get(s.wingert), b = activeB(w);
+  if (!w || !b) return null;
+  // pro Kriterium den jüngsten früheren Wert suchen
+  const out = {}; let any = false;
+  for (let k = w.begehungen.indexOf(b) - 1; k >= 0; k--) {
+    const r = s.ratings?.[w.begehungen[k].id]; if (!r) continue;
+    KRITERIEN.forEach(c => { if (out[c.key] === undefined && r[c.key]) { out[c.key] = r[c.key]; any = true; } });
+    if (!out.kom && r.kom) { out.kom = r.kom; out.bname = w.begehungen[k].name; any = true; }
   }
+  return any ? out : null;
+}
+async function saveWingert(w) { await DB.put('wingerts', w); }
+
+function cleanRating(e) {
+  if (!e) return null;
+  const r = {}; let has = false;
+  for (const k of KRITERIEN) { const v = parseInt(e[k.key], 10); if (v >= SKALA.min && v <= SKALA.max) { r[k.key] = v; has = true; } }
+  const kom = String(e.kom ?? '').trim();
+  if (kom) { r.kom = kom; has = true; }
+  if (!has) return null;
+  r.at = e.at || new Date().toISOString();
+  return r;
 }
 
+/* Laden + Übernahme der Daten aus der alten Version (lasts/photos am Stock) */
+async function loadAll() {
+  const [stocks, wingerts] = await Promise.all([DB.all('stocks'), DB.all('wingerts')]);
+  wingerts.forEach(w => S.wingerts.set(w.name, w));
+  const dirty = new Set(), dirtyW = new Set(), photos = [];
 
-    async function refreshList(){
-  const all = await getAll();
-  const list = document.getElementById('list');
-  list.innerHTML = '';
-
-  // Wingert-Filter
-  const filtered = all.filter(s => currentWingert === 'ALL' || s.wingert === currentWingert);
-
-  filtered.sort((a, b) => {
-  if (a.wingert !== b.wingert) {
-    return a.wingert.localeCompare(b.wingert, 'de');
+  for (const s of stocks) {
+    if (!s.wingert || typeof s.wingert !== 'string') { s.wingert = 'Unbenannt'; dirty.add(s); }
+    s.row = intOr(s.row, 0); s.index = intOr(s.index, 0);
   }
-  if (a.row !== b.row) {
-    return a.row - b.row;
-  }
-  return a.index - b.index;
-});
+  const legacy = new Map();
+  for (const s of stocks) if (!s.ratings) { if (!legacy.has(s.wingert)) legacy.set(s.wingert, []); legacy.get(s.wingert).push(s); }
 
-
-  for(const s of filtered){
-    const el = document.createElement('div');
-    el.id = `list-${s.id}`;
-    el.className = 'point';
-    el.textContent = `${s.wingert} — R${s.row} S${s.index}`;
-    el.onclick = ()=> focusStock(s, true);
-
-    if(s.id === highlightedId){
-  el.classList.add('highlight');
-}
-
-
-    list.appendChild(el);
-  }
-}
-
-async function focusStock(stock, openModal = true){
-  // 1. richtigen Wingert setzen
-  if (stock.wingert && currentWingert !== stock.wingert){
-    currentWingert = stock.wingert;
-    const sel = document.getElementById('select-wingert');
-    if (sel) sel.value = stock.wingert;
-  }
-
-  // 2. Liste neu aufbauen
-  await refreshList();
-
-  // 3. Highlight setzen
-  highlightedId = stock.id;
-
-  // 4. Scrollen
-  setTimeout(() => {
-    const el = document.getElementById(`list-${stock.id}`);
-    if (el){
-      el.scrollIntoView({ behavior:'smooth', block:'center' });
-      el.classList.add('highlight');
+  for (const [wn, list] of legacy) {
+    let w = S.wingerts.get(wn);
+    if (!w) { w = { name: wn, created: new Date().toISOString(), begehungen: [], activeBid: null }; S.wingerts.set(wn, w); }
+    const n = Math.max(0, ...list.map(s => Array.isArray(s.lasts) ? s.lasts.length : 0));
+    const bids = [];
+    for (let k = 0; k < n; k++) {
+      const dates = list.map(s => s.lasts?.[k]?.at).filter(Boolean).sort();
+      const b = { id: uid('b'), name: `Begehung ${k + 1}`, date: dates[0] || new Date().toISOString() };
+      w.begehungen.push(b); bids.push(b.id);
     }
-  }, 50);
-
-  // 5. Modal öffnen (optional)
-  if (openModal){
-    openDetail(stock);
-  }
-}
-
-
-    // modal / detail
-    function openDetail(meta){
-  (async () => {
-
-    // Datensatz laden
-    const all = await getAll();
-    const record = all.find(x => x.id === meta.id) || meta;
-
-    // letzte Begehung (oder leere Defaults)
-    const last = record.lasts?.length
-      ? record.lasts[record.lasts.length - 1]
-      : { wuchs:'', gesund:'', reife:'', kom:'' };
-
-    // Modal-Titel
-    document.getElementById('modal-title').textContent = record.id || 'Stock';
-
-    // Modal-Body
-    const body = document.getElementById('modal-body');
-    body.innerHTML = `
-      <div>Row: ${record.row ?? ''} — Index: ${record.index ?? ''}</div>
-      <div>Lat: ${record.lat?.toFixed(6) ?? ''} Lon: ${record.lon?.toFixed(6) ?? ''}</div>
-
-      <label>Wuchs (1–5):
-        <input id="f-wuchs" type="number" min="1" max="5" value="${last.wuchs}">
-      </label><br>
-
-      <label>Gesundheit (1–5):
-        <input id="f-gesund" type="number" min="1" max="5" value="${last.gesund}">
-      </label><br>
-
-      <label>Reife (1–5):
-        <input id="f-reife" type="number" min="1" max="5" value="${last.reife}">
-      </label><br>
-
-      <label>Kommentar:<br>
-        <textarea id="f-komm">${last.kom || ''}</textarea>
-      </label><br>
-
-      <label>Foto:
-        <input id="f-photo" type="file" accept="image/*" capture="environment">
-      </label>
-
-      <div id="thumbs"></div>
-    `;
-
-    // Fotos anzeigen
-    const thumbs = document.getElementById('thumbs');
-    if (record.photos?.length){
-      for (const p of record.photos){
-        const img = document.createElement('img');
-        img.src = p;
-        img.className = 'photo-thumb';
-        thumbs.appendChild(img);
-      }
-    }
-
-    // Modal öffnen
-    document.getElementById('modal').style.display = 'flex';
-
-    // SPEICHERN
-    document.getElementById('btn-save').onclick = async () => {
-      const w = parseInt(document.getElementById('f-wuchs').value) || 0;
-      const g = parseInt(document.getElementById('f-gesund').value) || 0;
-      const r = parseInt(document.getElementById('f-reife').value) || 0;
-      const k = document.getElementById('f-komm').value || '';
-
-      // Foto
-      const fileIn = document.getElementById('f-photo');
-      if (fileIn.files && fileIn.files[0]){
-        const b64 = await fileToBase64(fileIn.files[0]);
-        record.photos = record.photos || [];
-        record.photos.push(b64);
-      }
-
-      // neue Begehung anhängen
-      record.lasts = record.lasts || [];
-      record.lasts.push({
-        wuchs: w,
-        gesund: g,
-        reife: r,
-        kom: k,
-        at: new Date().toISOString()
+    if (!w.begehungen.length) w.begehungen.push(newBegehung());
+    w.activeBid = w.begehungen[w.begehungen.length - 1].id;
+    dirtyW.add(w);
+    for (const s of list) {
+      s.ratings = {};
+      (s.lasts || []).forEach((e, k) => { const r = cleanRating(e); if (r) s.ratings[bids[k]] = r; });
+      (s.photos || []).forEach(p => {
+        if (typeof p === 'string' && p.startsWith('data:')) photos.push({ id: uid('p'), stockId: s.id, bid: w.activeBid, at: s.created || new Date().toISOString(), data: p });
       });
-
-      await putStock(record);
-      document.getElementById('modal').style.display = 'none';
-      refreshList();
-    };
-
-    document.getElementById('btn-close').onclick = () => {
-      document.getElementById('modal').style.display = 'none';
-    };
-
-  })();
+      delete s.lasts; delete s.photos;
+      s.missing = !!s.missing;
+      dirty.add(s);
+    }
+  }
+  for (const s of stocks) {
+    if (!S.wingerts.has(s.wingert)) { const w = makeWingert(s.wingert); S.wingerts.set(w.name, w); dirtyW.add(w); }
+    indexStock(s);
+  }
+  if (dirty.size || dirtyW.size || photos.length) {
+    await tx(['stocks', 'wingerts', 'photos'], t => {
+      dirty.forEach(s => t.objectStore('stocks').put(s));
+      dirtyW.forEach(w => t.objectStore('wingerts').put(w));
+      photos.forEach(p => t.objectStore('photos').put(p));
+    });
+    if (legacy.size) setTimeout(() => toast(`Daten der alten Version übernommen (${fmtNum(dirty.size)} Stöcke).`, 4500), 400);
+  }
+  S.photos = await DB.photoIndex();
 }
 
-   
+/* Dauerhaften Speicher anfragen, damit der Browser die Daten nicht wegräumt */
+let persistAsked = false;
+async function requestPersist() {
+  if (persistAsked) return; persistAsked = true;
+  try { if (navigator.storage?.persist && !(await navigator.storage.persisted())) await navigator.storage.persist(); } catch { /* egal */ }
+}
 
+/* =====================================================================
+   Meldungen & Dialoge
+   ===================================================================== */
+let toastTimer;
+function toast(msg, ms = 2800) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+}
+const hasDialog = typeof HTMLDialogElement === 'function';
+// buttons: [{label, value, cls}] – der erste Button ist der Standard (Enter) und steht rechts
+function dialog({ title, html = '', buttons }) {
+  return new Promise(resolve => {
+    const d = $('#dlg');
+    d.innerHTML = `<form method="dialog"><h3>${esc(title)}</h3><div class="dlg-body">${html}</div>
+      <div class="dlg-foot">${buttons.map((b, i) => `<button value="${i}" class="btn ${b.cls || ''}">${esc(b.label)}</button>`).join('')}</div></form>`;
+    const form = d.querySelector('form');
+    d.returnValue = '';
+    d.addEventListener('close', () => { const b = buttons[parseInt(d.returnValue, 10)]; resolve({ value: b ? b.value : null, form }); }, { once: true });
+    d.showModal();
+    const inp = d.querySelector('input[type=text]'); if (inp) { inp.focus(); inp.select(); }
+  });
+}
+async function askText(title, label, value = '') {
+  if (!hasDialog) { const v = prompt(`${title}\n${label}`, value); return v ? v.trim() : null; }
+  const r = await dialog({ title, html: `<label class="field"><span>${esc(label)}</span><input type="text" name="v" value="${esc(value)}" autocomplete="off"></label>`,
+    buttons: [{ label: 'OK', value: 'ok', cls: 'primary' }, { label: 'Abbrechen', value: null }] });
+  if (r.value !== 'ok') return null;
+  return r.form.elements.v.value.trim() || null;
+}
+async function askConfirm(title, msg, ok = 'OK', danger = false) {
+  if (!hasDialog) return confirm(`${title}\n\n${msg}`);
+  const r = await dialog({ title, html: `<p>${esc(msg)}</p>`, buttons: [{ label: ok, value: true, cls: danger ? 'danger' : 'primary' }, { label: 'Abbrechen', value: false }] });
+  return r.value === true;
+}
 
-    function fileToBase64(file){ return new Promise((res,rej)=>{ const r = new FileReader(); r.onload = ()=>res(r.result); r.onerror = e => rej(e); r.readAsDataURL(file); }); }
+/* =====================================================================
+   Geo-Rechnung
+   ===================================================================== */
+const R_EARTH = 6378137;
+const rad = d => d * Math.PI / 180, deg = r => r * 180 / Math.PI;
+function dest(p, brg, m) {
+  const br = rad(brg), la1 = rad(p.lat), lo1 = rad(p.lng), dr = m / R_EARTH;
+  const la2 = Math.asin(Math.sin(la1) * Math.cos(dr) + Math.cos(la1) * Math.sin(dr) * Math.cos(br));
+  const lo2 = lo1 + Math.atan2(Math.sin(br) * Math.sin(dr) * Math.cos(la1), Math.cos(dr) - Math.sin(la1) * Math.sin(la2));
+  return { lat: deg(la2), lng: deg(lo2) };
+}
+function bearing(a, b) {
+  const la1 = rad(a.lat), la2 = rad(b.lat), dl = rad(b.lng - a.lng);
+  const y = Math.sin(dl) * Math.cos(la2), x = Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(dl);
+  return (deg(Math.atan2(y, x)) + 360) % 360;
+}
+function distM(a, b) {
+  const dLa = rad(b.lat - a.lat), dLo = rad(b.lng - a.lng);
+  const h = Math.sin(dLa / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLo / 2) ** 2;
+  return 2 * R_EARTH * Math.asin(Math.sqrt(h));
+}
+const hasPos = s => Number.isFinite(s.lat) && Number.isFinite(s.lon);
 
-    document.getElementById('btn-export').onclick = async () => {
-  const allStocks = await getAll();
+/* =====================================================================
+   Karte
+   ===================================================================== */
+const map = L.map('map', { preferCanvas: true, zoomControl: false, maxZoom: 22, attributionControl: true });
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+map.attributionControl.setPrefix(false);
+const baseLayers = {
+  sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 22, maxNativeZoom: 19, crossOrigin: 'anonymous', attribution: 'Luftbild © Esri, Maxar, Earthstar Geographics' }),
+  osm: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    { maxZoom: 22, maxNativeZoom: 19, crossOrigin: 'anonymous', attribution: '© OpenStreetMap-Mitwirkende' }),
+};
+function setBase(k) {
+  Object.values(baseLayers).forEach(l => map.removeLayer(l));
+  S.base = baseLayers[k] ? k : 'sat'; baseLayers[S.base].addTo(map); prefs.set('base', S.base);
+  $('#btn-layer').title = S.base === 'sat' ? 'Zur Straßenkarte wechseln' : 'Zum Luftbild wechseln';
+}
+const stockLayer = L.layerGroup().addTo(map);
+const markers = new Map();
 
-  // 🔹 Wingert-Filter anwenden
-  const all = allStocks.filter(s =>
-    currentWingert === 'ALL' || s.wingert === currentWingert
-  );
+function radiusForZoom(z) {
+  const pxPerM = 2 ** z / (156543.03 * Math.cos(rad(map.getCenter().lat)));
+  return Math.min(9, Math.max(2.2, pxPerM * 0.42));
+}
+function styleFor(s) {
+  const r = ratingOf(s), cur = inScope(s), sel = s.id === S.selectedId;
+  const st = { radius: radiusForZoom(map.getZoom()) * (sel ? 1.7 : 1), weight: sel ? 3.5 : 1.5, opacity: cur ? 1 : .35, fillOpacity: cur ? .95 : .3 };
+  if (s.missing) Object.assign(st, { color: '#4b524e', fillColor: '#9aa39e', fillOpacity: cur ? .7 : .25 });
+  else if (S.colorMode === 'status') Object.assign(st, r ? { color: '#163d0d', fillColor: '#3f8a2a' } : { color: '#1f2d2b', fillColor: '#ffffff' });
+  else {
+    const v = r?.[S.colorMode];
+    Object.assign(st, v ? { color: 'rgba(0,0,0,.55)', fillColor: valColor(v) } : { color: '#3d4744', fillColor: '#ffffff', fillOpacity: cur ? .55 : .2 });
+  }
+  if (sel) st.color = '#f2b705';
+  return st;
+}
+function drawStock(s) {
+  if (!hasPos(s)) return;
+  let m = markers.get(s.id);
+  if (!m) {
+    m = L.circleMarker([s.lat, s.lon], styleFor(s)).addTo(stockLayer);
+    const id = s.id;
+    m.on('click', () => { if (!G.pick) openStock(id); });
+    markers.set(s.id, m);
+  } else { m.setLatLng([s.lat, s.lon]); m.setStyle(styleFor(s)); }
+  if (s.id === S.selectedId) m.bringToFront();
+}
+function removeMarker(id) { const m = markers.get(id); if (m) { stockLayer.removeLayer(m); markers.delete(id); } }
+function restyleAll() { for (const s of S.stocks.values()) drawStock(s); }
+map.on('zoomend', () => { restyleAll(); if (map.hasLayer(G.layer) && G.A && G.B) updatePreview(); });
 
-  if (!all.length){
-    alert('Kein Wingert zum Exportieren ausgewählt');
+function fitStocks(list) {
+  list = list.filter(hasPos);
+  if (!list.length) return false;
+  map.fitBounds(L.latLngBounds(list.map(s => [s.lat, s.lon])), { paddingTopLeft: [24, 24], paddingBottomRight: [70, 80], maxZoom: 20 });
+  return true;
+}
+const fitCurrent = () => fitStocks([...S.stocks.values()].filter(inScope));
+
+/* Sorgt dafür, dass ein Stock sichtbar ist und nicht unter dem Bewertungsblatt liegt */
+function revealOnMap(s) {
+  if (!hasPos(s)) return;
+  const ll = [s.lat, s.lon];
+  if (map.getZoom() < 18) map.setView(ll, 19, { animate: false });
+  const mc = map.getContainer().getBoundingClientRect(), sh = $('#sheet').getBoundingClientRect();
+  let padB = 24, padR = 24;
+  if (!$('#sheet').hidden) {
+    if (innerWidth >= 900) padR = Math.max(24, mc.right - sh.left + 24);
+    else padB = Math.max(24, mc.bottom - sh.top + 44);
+  }
+  padB = Math.min(padB, Math.max(24, mc.height - 90));
+  padR = Math.min(padR, Math.max(24, mc.width - 90));
+  map.panInside(ll, { paddingTopLeft: [24, 24], paddingBottomRight: [padR, padB] });
+}
+
+/* ---------- GPS ---------- */
+const gps = { watch: null, follow: false, marker: null, circle: null, first: true };
+function gpsErrText(e) { return e?.code === 1 ? 'Standortzugriff nicht erlaubt – bitte in den Browser-Einstellungen freigeben.' : 'Kein GPS-Signal. Unter freiem Himmel nochmal versuchen.'; }
+function drawGPS(p) {
+  const ll = [p.lat, p.lng];
+  if (!gps.marker) {
+    gps.circle = L.circle(ll, { radius: p.acc, color: '#1e6fd9', weight: 1, fillOpacity: .12, interactive: false }).addTo(map);
+    gps.marker = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="gps-dot"></div>', iconSize: [18, 18] }), interactive: false, zIndexOffset: 900 }).addTo(map);
+  } else { gps.marker.setLatLng(ll); gps.circle.setLatLng(ll).setRadius(p.acc); }
+}
+function clearGPS() { if (gps.marker) { map.removeLayer(gps.marker); map.removeLayer(gps.circle); gps.marker = gps.circle = null; } }
+function updateGPSBtn() { const b = $('#btn-locate'); b.classList.toggle('on', gps.watch !== null); b.classList.toggle('follow', gps.watch !== null && gps.follow); }
+function startGPS() {
+  if (!navigator.geolocation) return toast('Dieses Gerät bietet keinen Standort an.');
+  gps.follow = true; gps.first = true;
+  gps.watch = navigator.geolocation.watchPosition(p => {
+    S.pos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
+    drawGPS(S.pos);
+    if (gps.follow) { if (gps.first) map.setView([S.pos.lat, S.pos.lng], Math.max(map.getZoom(), 19)); else map.panTo([S.pos.lat, S.pos.lng]); }
+    gps.first = false;
+  }, e => { toast(gpsErrText(e), 5000); if (e.code === 1) stopGPS(); }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
+  updateGPSBtn(); toast('Standort wird gesucht …');
+}
+function stopGPS() { if (gps.watch !== null) navigator.geolocation.clearWatch(gps.watch); gps.watch = null; gps.follow = false; clearGPS(); S.pos = null; updateGPSBtn(); }
+map.on('dragstart', () => { if (gps.follow) { gps.follow = false; updateGPSBtn(); } });
+
+function oneShotPos() {
+  return new Promise(res => {
+    if (!navigator.geolocation) { toast('Dieses Gerät bietet keinen Standort an.'); return res(null); }
+    toast('Standort wird gesucht …');
+    navigator.geolocation.getCurrentPosition(p => {
+      const v = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
+      if (gps.watch !== null) S.pos = v;
+      res(v);
+    }, e => { toast(gpsErrText(e), 5000); res(null); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 3000 });
+  });
+}
+/* Mittelt mehrere GPS-Messungen – genauer für Reihenanfang/-ende */
+function averagedPos(ms = 6000) {
+  return new Promise(res => {
+    if (!navigator.geolocation) { toast('Dieses Gerät bietet keinen Standort an.'); return res(null); }
+    const fixes = []; let done = false;
+    toast(`GPS misst ${ms / 1000} Sekunden – Handy bitte ruhig halten.`, ms);
+    const finish = () => {
+      if (done) return; done = true; navigator.geolocation.clearWatch(id);
+      if (!fixes.length) { toast('Kein GPS-Signal. Unter freiem Himmel nochmal versuchen.', 4000); return res(null); }
+      const best = Math.min(...fixes.map(f => f.accuracy));
+      const use = fixes.filter(f => f.accuracy <= best * 1.5);
+      let sw = 0, la = 0, lo = 0;
+      use.forEach(f => { const w = 1 / (f.accuracy * f.accuracy); sw += w; la += f.latitude * w; lo += f.longitude * w; });
+      res({ lat: la / sw, lng: lo / sw, acc: best, n: use.length });
+    };
+    const id = navigator.geolocation.watchPosition(p => fixes.push(p.coords), e => { if (e.code === 1) { toast(gpsErrText(e), 5000); done = true; navigator.geolocation.clearWatch(id); res(null); } },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: ms + 8000 });
+    setTimeout(finish, ms);
+  });
+}
+
+async function openNearest() {
+  const pos = (gps.watch !== null && S.pos) ? S.pos : await oneShotPos();
+  if (!pos) return;
+  if (gps.watch === null) { drawGPS(pos); setTimeout(() => { if (gps.watch === null) clearGPS(); }, 15000); }
+  const cands = [...S.stocks.values()].filter(s => inScope(s) && hasPos(s));
+  if (!cands.length) return toast('Hier gibt es noch keine Stöcke.');
+  const cos = Math.cos(rad(pos.lat));
+  let best = null, bd = Infinity;
+  for (const s of cands) { const dx = (s.lon - pos.lng) * cos, dy = s.lat - pos.lat, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = s; } }
+  const m = Math.sqrt(bd) * 111320;
+  await openStock(best.id);
+  toast(m > 30
+    ? `Du bist ${fmtNum(m)} m vom nächsten Stock entfernt (R${best.row} S${best.index}).`
+    : `R${best.row} S${best.index}, ${fmtNum(m, 1)} m entfernt. GPS-Genauigkeit ±${fmtNum(pos.acc)} m – ggf. mit Zurück/Weiter korrigieren.`, 4500);
+}
+
+/* =====================================================================
+   Kopfzeile, Legende, Reihen-Liste
+   ===================================================================== */
+function syncHeader() {
+  const sel = $('#sel-wingert');
+  const names = [...S.wingerts.keys()].sort((a, b) => a.localeCompare(b, 'de'));
+  sel.innerHTML = `<option value="ALL">${names.length ? 'Alle Wingerte' : 'Noch kein Wingert'}</option>` + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  sel.value = S.wingerts.has(S.current) ? S.current : 'ALL';
+  $('#dl-wingerte').innerHTML = names.map(n => `<option value="${esc(n)}"></option>`).join('');
+  const bb = $('#btn-begehung'), w = S.wingerts.get(S.current);
+  if (!w) { bb.hidden = true; return; }
+  const b = activeB(w), list = stocksOf(w.name), done = list.filter(s => s.ratings?.[b.id]).length;
+  bb.hidden = false;
+  bb.innerHTML = `<span>${esc(b.name)}</span><span class="bb-cnt">${fmtNum(done)} von ${fmtNum(list.length)}</span>`;
+  document.documentElement.style.setProperty('--hdr', $('#appbar').offsetHeight + 'px');
+}
+
+function renderLegend() {
+  $('#sel-color').innerHTML = `<option value="status">Bonitiert / offen</option>` + KRITERIEN.map(k => `<option value="${k.key}">${esc(k.label)}</option>`).join('');
+  $('#sel-color').value = S.colorMode;
+  $('#legend').innerHTML = S.colorMode === 'status'
+    ? `<span><i class="dot done"></i>bonitiert</span><span><i class="dot open"></i>offen</span><span><i class="dot miss"></i>Fehlstelle</span>`
+    : range().map(v => `<span><i class="dot" style="background:${valColor(v)}"></i>${v}</span>`).join('') + `<span><i class="dot open"></i>ohne</span>`;
+}
+
+function chipHTML(s, bid) {
+  const r = s.ratings?.[bid];
+  let cls = 'chip', style = '';
+  if (s.missing) cls += ' miss';
+  else if (S.colorMode === 'status') { if (r) cls += ' done'; }
+  else { const v = r?.[S.colorMode]; if (v) { cls += ' val'; style = ` style="--c:${valColor(v)};--t:${valText(v)}"`; } }
+  if (s.id === S.selectedId) cls += ' sel';
+  if (S.photos.get(s.id)?.length) cls += ' ph';
+  return `<button class="${cls}"${style} data-sid="${esc(s.id)}" aria-label="Reihe ${s.row}, Stock ${s.index}">${s.index}</button>`;
+}
+
+function renderRows() {
+  const box = $('#rows'), sum = $('#rows-summary'), scroller = $('#panel'), st = scroller.scrollTop;
+  const w = S.wingerts.get(S.current);
+  $('#jump').hidden = !w;
+
+  if (!w) {
+    const ws = [...S.wingerts.values()].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+    if (!ws.length) {
+      sum.innerHTML = '';
+      box.innerHTML = `<div class="empty"><p>Noch keine Stöcke angelegt. Lege die erste Reihe direkt auf der Karte an oder übernimm eine CSV-Datei aus der alten Version.</p>
+        <div class="actions"><button class="btn primary" data-goto="gen">Reihe anlegen</button><button class="btn" data-goto="import">Datei importieren</button></div></div>`;
+      return;
+    }
+    sum.innerHTML = `<div class="summary">${ws.length} ${ws.length === 1 ? 'Wingert' : 'Wingerte'} mit zusammen <b>${fmtNum(S.stocks.size)}</b> Stöcken. Tippe einen an, um loszulegen.</div>`;
+    box.innerHTML = ws.map(w => {
+      const list = stocksOf(w.name), b = activeB(w), done = list.filter(s => s.ratings?.[b.id]).length;
+      const rows = new Set(list.map(s => s.row)).size, pct = list.length ? done / list.length * 100 : 0;
+      const rowsTxt = rows === 1 ? '1 Reihe' : `${rows} Reihen`, stTxt = list.length === 1 ? '1 Stock' : `${fmtNum(list.length)} Stöcke`;
+      return `<button class="wcard" data-w="${esc(w.name)}"><div class="wcard-top"><b>${esc(w.name)}</b><span class="small muted">${rowsTxt}, ${stTxt}</span></div>
+        <div class="bar"><i style="width:${pct}%"></i></div><div class="small muted">${esc(b.name)}: ${fmtNum(done)} von ${fmtNum(list.length)} bonitiert</div></button>`;
+    }).join('');
+    scroller.scrollTop = st;
     return;
   }
 
-
-  all.sort((a,b)=> a.row - b.row || a.index - b.index);
-
-  const maxBegehungen = Math.max(...all.map(s => s.lasts.length));
-
-  const header = ['id','row','index','lat','lon','created'];
-  for (let i=0;i<maxBegehungen;i++){
-    header.push('wuchs','gesund','reife','kommentar','created');
-  }
-
-  const rows = [header];
-
-  for (const s of all) {
-    const r = [
-      s.id, s.row, s.index,
-      s.lat.toFixed(6),
-      s.lon.toFixed(6),
-      new Date(s.created).toLocaleDateString('de-DE')
-    ];
-
-    for (let i=0;i<maxBegehungen;i++){
-      const b = s.lasts[i] || {};
-      r.push(
-        b.wuchs || '',
-        b.gesund || '',
-        b.reife || '',
-        b.kom || '',
-        b.at ? new Date(b.at).toLocaleDateString('de-DE') : ''
-      );
+  const b = activeB(w), groups = new Map();
+  for (const s of stocksOf(w.name)) { if (!groups.has(s.row)) groups.set(s.row, []); groups.get(s.row).push(s); }
+  const rowNums = [...groups.keys()].sort((a, b) => a - b);
+  const crit = S.colorMode !== 'status' ? S.colorMode : null;
+  const sel = S.stocks.get(S.selectedId);
+  let total = 0, done = 0, miss = 0, html = '';
+  for (const row of rowNums) {
+    const list = groups.get(row).sort((a, b) => a.index - b.index);
+    const d = list.filter(s => s.ratings?.[b.id]).length, m = list.filter(s => s.missing).length;
+    total += list.length; done += d; miss += m;
+    let extra = '';
+    if (crit) {
+      const vals = list.map(s => s.ratings?.[b.id]?.[crit]).filter(Boolean);
+      if (vals.length) extra = `, Ø ${fmtNum(vals.reduce((a, c) => a + c, 0) / vals.length, 1)}`;
     }
+    const open = S.expanded.has(row), pct = list.length ? d / list.length * 100 : 0;
+    html += `<div class="row${open ? ' open' : ''}${sel?.row === row ? ' cur' : ''}">
+      <button class="row-h" data-row="${row}" aria-expanded="${open}"><span class="row-n">R ${row}</span><span class="bar"><i style="width:${pct}%"></i></span><span class="row-c">${d}/${list.length}${extra}</span><span class="chev">›</span></button>
+      ${open ? `<div class="chips">${list.map(s => chipHTML(s, b.id)).join('')}</div>
+      <div class="row-foot"><button class="link" data-fitrow="${row}">Auf der Karte zeigen</button><button class="link danger" data-delrow="${row}">Reihe löschen</button></div>` : ''}
+    </div>`;
+  }
+  sum.innerHTML = `<div class="summary"><b>${fmtNum(done)}</b> von ${fmtNum(total)} Stöcken bonitiert (${total ? fmtNum(done / total * 100) : 0} %) in ${rowNums.length} Reihen${miss ? `, ${fmtNum(miss)} Fehlstellen` : ''}.</div>`;
+  box.innerHTML = html || `<div class="empty"><p>Dieser Wingert hat noch keine Stöcke.</p></div>`;
+  scroller.scrollTop = st;
+}
 
+function refreshAll() { syncHeader(); renderRows(); renderLegend(); restyleAll(); if (cur) renderSheet(); if (!$('#tab-data').hidden) renderData(); }
+
+function selectWingert(name, fit = false) {
+  S.current = S.wingerts.has(name) ? name : 'ALL';
+  prefs.set('wingert', S.current);
+  if (S.selectedId && S.stocks.get(S.selectedId)?.wingert !== S.current) closeSheet();
+  S.expanded.clear();
+  refreshAll();
+  if (fit) fitCurrent();
+}
+
+function fitRow(row) { fitStocks(rowStocks(S.current, row)); }
+
+async function deleteStocks(list) {
+  const ids = new Set(list.map(s => s.id)), pids = [];
+  ids.forEach(id => (S.photos.get(id) || []).forEach(p => pids.push(p)));
+  await tx(['stocks', 'photos'], t => { ids.forEach(id => t.objectStore('stocks').delete(id)); pids.forEach(id => t.objectStore('photos').delete(id)); });
+  if (ids.has(S.selectedId)) closeSheet();
+  list.forEach(s => { unindexStock(s); removeMarker(s.id); S.photos.delete(s.id); });
+}
+async function deleteRow(row) {
+  const list = rowStocks(S.current, row), done = list.filter(s => Object.keys(s.ratings || {}).length).length;
+  const ok = await askConfirm(`Reihe ${row} löschen?`, `${list.length} Stöcke${done ? `, davon ${done} mit Bewertungen,` : ''} werden samt Fotos gelöscht.`, 'Reihe löschen', true);
+  if (!ok) return;
+  await deleteStocks(list); S.expanded.delete(row); refreshAll(); toast(`Reihe ${row} gelöscht.`);
+}
+
+/* =====================================================================
+   Bewertungs-Blatt (speichert jede Eingabe sofort)
+   ===================================================================== */
+let cur = null, komTimer = null;
+
+function stepTarget(s, step) {
+  const d = S.walkDir * step, list = rowStocks(s.wingert, s.row), i = list.findIndex(x => x.id === s.id);
+  if (i + d >= 0 && i + d < list.length) return { stock: list[i + d], flip: false };
+  const rows = rowsOf(s.wingert), nr = rows[rows.indexOf(s.row) + step];
+  if (nr === undefined) return null;
+  const nl = rowStocks(s.wingert, nr);
+  if (!nl.length) return null;
+  if (S.serp) return { stock: d > 0 ? nl[nl.length - 1] : nl[0], flip: true };
+  return { stock: d > 0 ? nl[0] : nl[nl.length - 1], flip: false };
+}
+function updateNav(s) {
+  const n = stepTarget(s, 1), p = stepTarget(s, -1);
+  const lbl = t => t.stock.row === s.row ? `Stock ${t.stock.index}` : `R${t.stock.row} S${t.stock.index}`;
+  $('#sheet-next').innerHTML = n ? `Weiter<small>${lbl(n)}</small>` : 'Weiter<small>Wingert-Ende</small>';
+  $('#sheet-prev').innerHTML = p ? `Zurück<small>${lbl(p)}</small>` : 'Zurück<small>Anfang</small>';
+  $('#sheet-next').disabled = !n; $('#sheet-prev').disabled = !p;
+}
+
+async function openStock(id) {
+  await flushKom();
+  const s = S.stocks.get(id); if (!s) return;
+  const prevId = S.selectedId, switched = S.current !== s.wingert;
+  if (switched) { S.current = s.wingert; prefs.set('wingert', s.wingert); S.expanded.clear(); }
+  S.selectedId = id; cur = { id };
+  S.expanded.add(s.row);
+  syncHeader(); renderRows();
+  if (switched) restyleAll();
+  else { const p = S.stocks.get(prevId); if (p) drawStock(p); drawStock(s); }
+  renderSheet();
+  const sh = $('#sheet');
+  if (sh.hidden) { sh.hidden = false; void sh.offsetWidth; }
+  sh.classList.add('open');
+  setTimeout(() => {
+    revealOnMap(s);
+    const chip = $(`.chip[data-sid="${CSS.escape(id)}"]`);
+    chip?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, 240);
+}
+
+function closeSheet() {
+  flushKom();
+  const sh = $('#sheet');
+  sh.classList.remove('open');
+  setTimeout(() => { if (!sh.classList.contains('open')) sh.hidden = true; }, 240);
+  const prev = S.selectedId; S.selectedId = null; cur = null;
+  if (prev) { const s = S.stocks.get(prev); if (s) drawStock(s); }
+  renderRows();
+}
+
+function renderSheet() {
+  const s = S.stocks.get(cur?.id); if (!s) return closeSheet();
+  const b = activeB(s.wingert), r = s.ratings?.[b.id] || {}, prev = prevRating(s);
+  $('#sheet-sub').textContent = `${s.wingert}, ${b.name}`;
+  $('#sheet-title').textContent = `Reihe ${s.row}, Stock ${s.index}`;
+  $('#sheet-saved').textContent = r.at ? `Gespeichert um ${fmtTime(r.at)} Uhr` : 'Noch nicht bonitiert';
+  const vals = range();
+  $('#sheet-body').innerHTML = KRITERIEN.map(k => `
+    <div class="crit">
+      <div class="crit-l"><b>${esc(k.label)}</b>${prev?.[k.key] ? `<small>zuletzt ${prev[k.key]}</small>` : ''}</div>
+      <div class="seg" data-k="${k.key}" style="--n:${vals.length}">${vals.map(v =>
+        `<button type="button" data-v="${v}" class="${r[k.key] === v ? 'on' : ''}${prev?.[k.key] === v ? ' was' : ''}" style="--c:${valColor(v)};--t:${valText(v)}" aria-pressed="${r[k.key] === v}" aria-label="${esc(k.label)} ${v}">${v}</button>`).join('')}</div>
+    </div>`).join('') + `
+    <label class="field"><span>Kommentar</span><textarea id="s-kom" rows="2" placeholder="z. B. Peronospora, Chlorose, nachpflanzen">${esc(r.kom || '')}</textarea></label>
+    ${prev?.kom ? `<div class="small muted">Kommentar ${esc(prev.bname)}: ${esc(prev.kom)}</div>` : ''}
+    <div class="sheet-row">
+      <label class="switch"><input type="checkbox" id="s-miss" ${s.missing ? 'checked' : ''}><span>Fehlstelle</span></label>
+      <button type="button" class="btn" id="s-photo">Foto hinzufügen</button>
+    </div>
+    <div class="thumbs" id="s-thumbs"></div>`;
+  loadThumbs(s.id);
+  updateNav(s);
+}
+
+async function writeRating(s, bid, r) {
+  const clean = cleanRating({ ...r, at: undefined });
+  s.ratings = s.ratings || {};
+  if (clean) s.ratings[bid] = clean; else delete s.ratings[bid];
+  try { await DB.put('stocks', s); }
+  catch (e) { console.error(e); toast('Speichern fehlgeschlagen: ' + (e?.message || e), 6000); return; }
+  drawStock(s); renderRows(); syncHeader();
+  if (cur?.id === s.id) $('#sheet-saved').textContent = clean ? `Gespeichert um ${fmtTime(clean.at)} Uhr` : 'Noch nicht bonitiert';
+  requestPersist();
+}
+async function setCrit(k, v) {
+  const s = S.stocks.get(cur?.id); if (!s) return;
+  const b = activeB(s.wingert), r = { ...(s.ratings?.[b.id] || {}) };
+  const kom = $('#s-kom')?.value.trim(); if (kom !== undefined) r.kom = kom;   // Kommentar gleich mitnehmen
+  if (r[k] === v) delete r[k]; else r[k] = v;                                  // nochmal tippen = löschen
+  $$(`.seg[data-k="${k}"] button`).forEach(x => { const on = +x.dataset.v === r[k]; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
+  if (navigator.vibrate) navigator.vibrate(8);
+  await writeRating(s, b.id, r);
+}
+async function flushKom() {
+  clearTimeout(komTimer);
+  const ta = $('#s-kom'), s = S.stocks.get(cur?.id);
+  if (!ta || !s) return;
+  const b = activeB(s.wingert), old = s.ratings?.[b.id] || {}, v = ta.value.trim();
+  if ((old.kom || '') === v) return;
+  await writeRating(s, b.id, { ...old, kom: v });
+}
+async function setMissing(v) {
+  const s = S.stocks.get(cur?.id); if (!s) return;
+  s.missing = v;
+  await DB.put('stocks', s);
+  drawStock(s); renderRows();
+}
+async function go(step) {
+  const s = S.stocks.get(cur?.id); if (!s) return;
+  await flushKom();
+  const t = stepTarget(s, step); if (!t) return;
+  if (t.flip) S.walkDir *= -1;
+  openStock(t.stock.id);
+}
+
+/* ---------- Fotos ---------- */
+async function compressImage(file, max = 1600, q = 0.8) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Bild nicht lesbar')); i.src = url; });
+    const sc = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * sc); c.height = Math.round(img.naturalHeight * sc);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', q);
+  } finally { URL.revokeObjectURL(url); }
+}
+async function loadThumbs(stockId) {
+  const photos = (await DB.photosOf(stockId)).sort((a, b) => (a.at < b.at ? -1 : 1));
+  const box = $('#s-thumbs');
+  if (!box || cur?.id !== stockId) return;
+  box.innerHTML = photos.map(p => `<button type="button" class="thumb" data-photo="${p.id}"><img src="${p.data}" alt="Foto vom ${fmtDate(p.at)}"><span>${fmtDate(p.at)}</span></button>`).join('');
+}
+async function addPhoto(file) {
+  const s = S.stocks.get(cur?.id); if (!s || !file) return;
+  try {
+    const data = await compressImage(file);
+    const p = { id: uid('p'), stockId: s.id, bid: activeB(s.wingert).id, at: new Date().toISOString(), data };
+    await DB.put('photos', p);
+    if (!S.photos.has(s.id)) S.photos.set(s.id, []);
+    S.photos.get(s.id).push(p.id);
+    loadThumbs(s.id); renderRows(); requestPersist();
+    toast('Foto gespeichert.');
+  } catch (e) { console.error(e); toast('Foto konnte nicht gespeichert werden: ' + (e?.message || e), 5000); }
+}
+async function openPhoto(pid) {
+  const p = await DB.get('photos', pid); if (!p) return;
+  const lb = $('#lightbox'), s = S.stocks.get(p.stockId);
+  lb.querySelector('img').src = p.data;
+  $('#lb-cap').textContent = `${s ? `Reihe ${s.row}, Stock ${s.index}` : ''} – ${fmtDate(p.at)}, ${fmtTime(p.at)} Uhr`;
+  lb.dataset.pid = pid; lb.hidden = false;
+}
+async function deletePhoto() {
+  const lb = $('#lightbox'), pid = lb.dataset.pid;
+  if (!pid || !(await askConfirm('Foto löschen?', 'Das Foto wird von diesem Gerät entfernt.', 'Löschen', true))) return;
+  const p = await DB.get('photos', pid);
+  await DB.del('photos', pid);
+  if (p) { const a = S.photos.get(p.stockId) || []; S.photos.set(p.stockId, a.filter(x => x !== pid)); }
+  lb.hidden = true;
+  if (cur && p?.stockId === cur.id) loadThumbs(cur.id);
+  renderRows(); toast('Foto gelöscht.');
+}
+
+/* ---------- Begehungen ---------- */
+async function begehungDialog() {
+  const w = S.wingerts.get(S.current); if (!w) return;
+  await flushKom();
+  for (;;) {
+    const list = stocksOf(w.name);
+    const html = `<p class="small muted">Neue Bewertungen landen in der gewählten Begehung. Frühere Werte siehst du beim Bonitieren als „zuletzt“.</p>
+      <div class="blist">${w.begehungen.slice().reverse().map(b => {
+        const n = list.filter(s => s.ratings?.[b.id]).length;
+        return `<label class="bitem"><input type="radio" name="bid" value="${b.id}" ${b.id === w.activeBid ? 'checked' : ''}>
+          <span><b>${esc(b.name)}</b><small>${fmtDate(b.date)}, ${fmtNum(n)} von ${fmtNum(list.length)} bonitiert</small></span></label>`;
+      }).join('')}</div>`;
+    const r = await dialog({ title: `Begehungen in ${w.name}`, html, buttons: [
+      { label: 'Fertig', value: 'ok', cls: 'primary' }, { label: 'Neue Begehung', value: 'new' },
+      { label: 'Umbenennen', value: 'ren' }, { label: 'Löschen', value: 'del', cls: 'danger-line' }] });
+    const pick = r.form.querySelector('input[name=bid]:checked')?.value;
+    const target = w.begehungen.find(b => b.id === pick);
+    if (pick && pick !== w.activeBid && r.value !== null) { w.activeBid = pick; await saveWingert(w); }
+    if (r.value === 'new') {
+      const name = await askText('Neue Begehung', 'Name', `Begehung ${fmtDate(new Date())}`);
+      if (name) { const b = newBegehung(name); w.begehungen.push(b); w.activeBid = b.id; await saveWingert(w); toast(`„${name}“ gestartet.`); }
+      continue;
+    }
+    if (r.value === 'ren' && target) {
+      const name = await askText('Begehung umbenennen', 'Name', target.name);
+      if (name) { target.name = name; await saveWingert(w); }
+      continue;
+    }
+    if (r.value === 'del' && target) {
+      if (w.begehungen.length < 2) { toast('Eine Begehung muss bleiben. Lege erst eine neue an.'); continue; }
+      const aff = list.filter(s => s.ratings?.[target.id]);
+      const ok = await askConfirm(`„${target.name}“ löschen?`, aff.length ? `${aff.length} Bewertungen dieser Begehung gehen verloren. Fotos bleiben erhalten.` : 'Diese Begehung enthält noch keine Bewertungen.', 'Löschen', true);
+      if (ok) {
+        aff.forEach(s => delete s.ratings[target.id]);
+        w.begehungen = w.begehungen.filter(b => b !== target);
+        if (w.activeBid === target.id) w.activeBid = w.begehungen[w.begehungen.length - 1].id;
+        await tx(['stocks', 'wingerts'], t => { aff.forEach(s => t.objectStore('stocks').put(s)); t.objectStore('wingerts').put(w); });
+      }
+      continue;
+    }
+    break;
+  }
+  refreshAll();
+}
+
+/* =====================================================================
+   Reihen anlegen
+   ===================================================================== */
+const G = { A: null, B: null, mA: null, mB: null, pick: null, layer: L.layerGroup(), prev: L.layerGroup(), raf: 0, plan: null };
+G.prev.addTo(G.layer);
+
+function pinIcon(which) {
+  const fill = which === 'A' ? '#6a2c5a' : '#2f6a1f';
+  return L.divIcon({ className: '', iconSize: [30, 42], iconAnchor: [15, 41],
+    html: `<svg width="30" height="42" viewBox="0 0 30 42"><path d="M15 41S2 25.5 2 14.5a13 13 0 0 1 26 0C28 25.5 15 41 15 41Z" fill="${fill}" stroke="#fff" stroke-width="2.5"/><text x="15" y="19.5" text-anchor="middle" font-size="14" font-weight="700" fill="#fff" font-family="system-ui,sans-serif">${which}</text></svg>` });
+}
+function setPick(which) {
+  G.pick = which;
+  $('#pick-hint').hidden = !which;
+  $('#pick-text').textContent = which ? `Tippe auf den ${which === 'A' ? 'ersten' : 'letzten'} Stock der Reihe (Punkt ${which}).` : '';
+  map.getContainer().classList.toggle('picking', !!which);
+}
+function setGenPoint(which, ll) {
+  G[which] = { lat: ll.lat, lng: ll.lng };
+  const key = 'm' + which;
+  if (!G[key]) {
+    G[key] = L.marker([ll.lat, ll.lng], { draggable: true, icon: pinIcon(which), zIndexOffset: 1000, autoPan: true }).addTo(G.layer);
+    G[key].on('drag', e => { const p = e.target.getLatLng(); G[which] = { lat: p.lat, lng: p.lng }; schedulePreview(); });
+    G[key].on('dragend', () => updatePreview());
+  } else G[key].setLatLng([ll.lat, ll.lng]);
+  updatePreview();
+}
+map.on('click', e => {
+  if (!G.pick) return;
+  const which = G.pick;
+  setGenPoint(which, e.latlng);
+  setPick(which === 'A' && !G.B ? 'B' : null);
+});
+async function gpsGenPoint(which) {
+  const p = await averagedPos();
+  if (!p) return;
+  setGenPoint(which, p);
+  map.setView([p.lat, p.lng], Math.max(map.getZoom(), 19));
+  toast(`Punkt ${which} per GPS gesetzt (${p.n} Messungen, ±${fmtNum(p.acc)} m).${p.acc > 6 ? ' Bei Bedarf auf der Karte nachziehen.' : ''}`, 4500);
+}
+function resetGen() {
+  G.A = G.B = null;
+  ['mA', 'mB'].forEach(k => { if (G[k]) { G.layer.removeLayer(G[k]); G[k] = null; } });
+  setPick(null); updatePreview();
+}
+
+function genInputs() {
+  return {
+    spacing: numOr($('#g-spacing').value, 0), rowSp: numOr($('#g-rowsp').value, 0),
+    left: Math.max(0, intOr($('#g-left').value, 0)), right: Math.max(0, intOr($('#g-right').value, 0)),
+    start: Math.max(1, intOr($('#g-start').value, 1)), order: $('#g-order').value,
+  };
+}
+function computePlan() {
+  if (!G.A || !G.B) return null;
+  const p = genInputs();
+  if (!(p.spacing >= 0.3)) return { error: 'Der Stockabstand muss mindestens 0,3 m sein.' };
+  if (!(p.rowSp >= 0.5)) return { error: 'Der Reihenabstand muss mindestens 0,5 m sein.' };
+  const brg = bearing(G.A, G.B), len = distM(G.A, G.B);
+  if (len < 0.5) return { error: 'A und B liegen zu dicht beieinander.' };
+  const nStock = Math.round(len / p.spacing) + 1;
+  const offs = [];
+  for (let i = p.left; i >= 1; i--) offs.push(-i);
+  offs.push(0);
+  for (let i = 1; i <= p.right; i++) offs.push(i);
+  if (p.order === 'rl') offs.reverse();
+  const rows = offs.map((off, k) => ({ num: p.start + k, off }));
+  const total = rows.length * nStock;
+  if (total > 30000) return { error: `Das wären ${fmtNum(total)} Stöcke – bitte Abstände und Reihenzahl prüfen.` };
+  return { ...p, brg, len, nStock, rows, total, baseNum: rows.find(r => r.off === 0).num };
+}
+function planPoints(plan) {
+  const out = [];
+  for (const r of plan.rows) {
+    const p0 = dest(G.A, plan.brg + 90, r.off * plan.rowSp);
+    for (let i = 0; i < plan.nStock; i++) { const q = dest(p0, plan.brg, i * plan.spacing); out.push({ row: r.num, index: i + 1, lat: q.lat, lon: q.lng }); }
+  }
+  return out;
+}
+function rangeText(nums) {
+  const a = [...nums].sort((x, y) => x - y), parts = [];
+  for (let i = 0; i < a.length; i++) { let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; parts.push(i === j ? `${a[i]}` : `${a[i]}–${a[j]}`); i = j; }
+  return parts.join(', ');
+}
+function schedulePreview() { if (!G.raf) G.raf = requestAnimationFrame(() => { G.raf = 0; updatePreview(); }); }
+function updatePreview() {
+  G.prev.clearLayers();
+  $('#g-a-txt').textContent = G.A ? `${G.A.lat.toFixed(6)}, ${G.A.lng.toFixed(6)}` : 'nicht gesetzt';
+  $('#g-b-txt').textContent = G.B ? `${G.B.lat.toFixed(6)}, ${G.B.lng.toFixed(6)}` : 'nicht gesetzt';
+  const plan = G.plan = computePlan(), sum = $('#g-summary'), btn = $('#g-create');
+  btn.disabled = true; btn.textContent = 'Stöcke anlegen';
+  if (!plan) { sum.innerHTML = `<span class="muted">Setze Punkt A und B, dann erscheint hier die Vorschau.</span>`; return; }
+  if (plan.error) { sum.innerHTML = `<div class="warn">${esc(plan.error)}</div>`; return; }
+
+  const wn = $('#g-wingert').value.trim();
+  const existing = new Set(wn && S.wingerts.has(wn) ? stocksOf(wn).map(s => s.row) : []);
+  plan.coll = plan.rows.filter(r => existing.has(r.num)).map(r => r.num);
+  const nums = plan.rows.map(r => r.num);
+  sum.innerHTML = `<b>${plan.rows.length} ${plan.rows.length === 1 ? 'Reihe' : 'Reihen'} mit zusammen ${fmtNum(plan.total)} Stöcken</b><br>
+    Reihenlänge ${fmtNum(plan.len, 1)} m, ${plan.nStock} Stöcke je Reihe. ${nums.length === 1 ? 'Nummer' : 'Nummern'} ${rangeText(nums)}, die Reihe A–B wird R${plan.baseNum}.
+    ${plan.coll.length ? `<div class="warn">Reihe ${rangeText(plan.coll)} gibt es in „${esc(wn)}“ schon. Sie wird samt Bewertungen ersetzt.</div>` : ''}`;
+  btn.disabled = false;
+  if (plan.coll.length) btn.textContent = 'Ersetzen und anlegen';
+
+  // Vorschau auf der Karte
+  const showPts = plan.total <= 8000;
+  const pxPerRow = plan.rowSp * 2 ** map.getZoom() / (156543.03 * Math.cos(rad(G.A.lat)));
+  const every = Math.max(1, Math.ceil(26 / pxPerRow));
+  const last = plan.rows.length - 1;
+  plan.rows.forEach((r, k) => { r.label = k % every === 0 || (k === last && last % every >= every / 2); });
+  for (const r of plan.rows) {
+    const p0 = dest(G.A, plan.brg + 90, r.off * plan.rowSp), p1 = dest(p0, plan.brg, (plan.nStock - 1) * plan.spacing);
+    L.polyline([[p0.lat, p0.lng], [p1.lat, p1.lng]], { color: r.off === 0 ? '#f2b705' : '#c27bb0', weight: 2.5, opacity: .9, dashArray: '4 4', interactive: false }).addTo(G.prev);
+    if (r.label) {
+      const lp = dest(p0, plan.brg + 180, 2.2);
+      L.marker([lp.lat, lp.lng], { interactive: false, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<span class="rlabel">R${r.num}</span>` }) }).addTo(G.prev);
+    }
+  }
+  if (showPts) for (const q of planPoints(plan)) L.circleMarker([q.lat, q.lon], { radius: 2.5, color: '#6a2c5a', weight: 1, fillColor: '#ffffff', fillOpacity: 1, interactive: false }).addTo(G.prev);
+}
+
+async function doGenerate() {
+  const name = $('#g-wingert').value.trim();
+  if (!name) { toast('Bitte zuerst einen Namen für den Wingert eingeben.'); $('#g-wingert').focus(); return; }
+  updatePreview();
+  const plan = G.plan;
+  if (!plan || plan.error) return;
+  if (plan.coll.length) {
+    const ok = await askConfirm('Reihen ersetzen?', `Reihe ${rangeText(plan.coll)} in „${name}“ wird mit allen Bewertungen und Fotos ersetzt.`, 'Ersetzen', true);
+    if (!ok) return;
+    const set = new Set(plan.coll);
+    await deleteStocks(stocksOf(name).filter(s => set.has(s.row)));
+  }
+  let w = S.wingerts.get(name);
+  if (!w) { w = makeWingert(name); S.wingerts.set(name, w); }
+  const created = new Date().toISOString();
+  const news = planPoints(plan).map(p => {
+    let id = `${name}-R${p.row}-S${p.index}`;
+    if (S.stocks.has(id)) id = uid('s');
+    return { id, wingert: name, row: p.row, index: p.index, lat: p.lat, lon: p.lon, created, missing: false, ratings: {} };
+  });
+  try {
+    await tx(['stocks', 'wingerts'], t => { news.forEach(s => t.objectStore('stocks').put(s)); t.objectStore('wingerts').put(w); });
+  } catch (e) { console.error(e); toast('Anlegen fehlgeschlagen: ' + (e?.message || e), 6000); return; }
+  news.forEach(s => { indexStock(s); drawStock(s); });
+  requestPersist();
+  resetGen();
+  showTab('rows');
+  selectWingert(name, true);
+  toast(`${fmtNum(news.length)} Stöcke in „${name}“ angelegt.`);
+}
+
+/* =====================================================================
+   Export
+   ===================================================================== */
+const csvCell = v => { const s = String(v ?? ''); return /[";\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+function csvFor(w) {
+  const list = stocksOf(w.name).sort((a, b) => a.row - b.row || a.index - b.index);
+  const head = ['Wingert', 'Reihe', 'Stock', 'Lat', 'Lon', 'Angelegt', 'Fehlstelle'];
+  for (const b of w.begehungen) { KRITERIEN.forEach(k => head.push(`${k.label} [${b.name}]`)); head.push(`Kommentar [${b.name}]`, `Datum [${b.name}]`); }
+  const rows = [head];
+  for (const s of list) {
+    const r = [w.name, s.row, s.index, hasPos(s) ? s.lat.toFixed(7) : '', hasPos(s) ? s.lon.toFixed(7) : '', s.created ? fmtDate(s.created) : '', s.missing ? 'ja' : ''];
+    for (const b of w.begehungen) { const x = s.ratings?.[b.id] || {}; KRITERIEN.forEach(k => r.push(x[k.key] ?? '')); r.push(x.kom ?? '', x.at ? fmtDate(x.at) : ''); }
     rows.push(r);
   }
-
-  const csv = rows.map(r =>
-    r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')
-  ).join('\n');
-
-  downloadCSV(csv, 'reben_bonitur.csv');
-};
-
-function downloadCSV(text, name){
-  const blob = new Blob([text], {type:'text/csv'});
+  return '\ufeff' + rows.map(r => r.map(csvCell).join(';')).join('\r\n');
+}
+async function deliver(blob, name) {
+  try {
+    const file = new File([blob], name, { type: blob.type });
+    if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: name }); return; }
+      catch (e) { if (e.name === 'AbortError') return; }
+    }
+  } catch { /* weiter mit Download */ }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
-
-
-// Sortierung wie in der Weboberfläche
-
-
-    document.getElementById('btn-clear').onclick = async ()=>{
-      if(!confirm('Alle lokal gespeicherten Daten löschen?')) return;
-      await clearAll();
-      markersLayer.clearLayers();
-      tempMarkers.forEach(m=>map.removeLayer(m)); tempMarkers = [];
-      generatedPoints = [];
-      refreshList();
-      setStatus('Daten gelöscht');
-    };
-
-    // initial refresh
-    refreshList();
-    document.getElementById('btn-import').onclick = () => {
-  document.getElementById('csv-file').click();
-};
-
-
-function refreshWingertSelect(wingerts){
-  const sel = document.getElementById('select-wingert');
-  if(!sel) return;
-  sel.innerHTML = '<option value="ALL">Alle Wingert</option>';
-  wingerts.forEach(w => {
-    const opt = document.createElement('option');
-    opt.value = w;
-    opt.textContent = w;
-    sel.appendChild(opt);
+async function exportCsv() {
+  await flushKom();
+  const ws = S.wingerts.has(S.current) ? [S.wingerts.get(S.current)] : [...S.wingerts.values()];
+  if (!ws.length) return toast('Es gibt noch nichts zu exportieren.');
+  if (ws.length === 1) return deliver(new Blob([csvFor(ws[0])], { type: 'text/csv;charset=utf-8' }), `bonitur_${safeName(ws[0].name)}_${isoDate()}.csv`);
+  const zip = new JSZip();
+  ws.forEach(w => zip.file(`${safeName(w.name)}.csv`, csvFor(w)));
+  deliver(await zip.generateAsync({ type: 'blob' }), `bonitur_alle_${isoDate()}.zip`);
+}
+const mimeExt = d => (/^data:image\/(\w+)/.exec(d)?.[1] || 'jpg').replace('jpeg', 'jpg');
+async function exportBackup() {
+  await flushKom();
+  if (!S.stocks.size) return toast('Es gibt noch nichts zu sichern.');
+  toast('Backup wird erstellt …', 8000);
+  const zip = new JSZip(), photos = await DB.all('photos');
+  const meta = photos.map(p => {
+    const s = S.stocks.get(p.stockId);
+    const file = `fotos/${safeName(s?.wingert || 'ohne')}_R${s?.row ?? 0}_S${s?.index ?? 0}_${p.id}.${mimeExt(p.data)}`;
+    zip.file(file, p.data.split(',')[1], { base64: true });
+    return { id: p.id, stockId: p.stockId, bid: p.bid, at: p.at, file };
   });
+  zip.file('backup.json', JSON.stringify({ app: 'reben-bonitur', version: 2, exported: new Date().toISOString(), wingerts: [...S.wingerts.values()], stocks: [...S.stocks.values()], photos: meta }));
+  for (const w of S.wingerts.values()) zip.file(`csv/${safeName(w.name)}.csv`, csvFor(w));
+  const blob = await zip.generateAsync({ type: 'blob' });
+  toast(`Backup fertig (${fmtNum(blob.size / 1048576, 1)} MB).`);
+  deliver(blob, `bonitur_backup_${isoDate()}.zip`);
 }
 
-
-function parseDate(v){
-  if (!v) return new Date();
-  if (v.includes('.')) {
-    const [d,m,y] = v.split('.').map(Number);
-    return new Date(y, m-1, d);
+/* =====================================================================
+   Import (neues Format, altes Format, ZIP, Backup)
+   ===================================================================== */
+async function readText(src) {
+  const buf = src instanceof ArrayBuffer ? src : await src.arrayBuffer();
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch { return new TextDecoder('windows-1252').decode(buf); }
+}
+function parseCSV(text) {
+  text = text.replace(/^\ufeff/, '');
+  const nl = text.search(/\r?\n/), first = nl < 0 ? text : text.slice(0, nl);
+  const delim = (first.match(/;/g) || []).length >= (first.match(/,/g) || []).length ? ';' : ',';
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+    else if (c === '"') q = true;
+    else if (c === delim) { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += c;
   }
-  const d = new Date(v);
-  return isNaN(d) ? new Date() : d;
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(c => c.trim() !== ''));
 }
-async function importZip(file){
-  const zip = await JSZip.loadAsync(file);
 
-  const csvFiles = Object.values(zip.files)
-    .filter(f => !f.dir && f.name.toLowerCase().endsWith('.csv'));
+function importCtx() { return { stocks: new Set(), wingerts: new Set(), newW: new Set() }; }
+function ctxWingert(ctx, name) {
+  let w = S.wingerts.get(name);
+  if (!w) { w = { name, created: new Date().toISOString(), begehungen: [], activeBid: null }; S.wingerts.set(name, w); ctx.newW.add(w); }
+  ctx.wingerts.add(w);
+  return w;
+}
+function begehungByName(w, name, dateHint) {
+  let b = w.begehungen.find(x => x.name === name);
+  if (!b) { b = { id: uid('b'), name, date: dateHint || new Date().toISOString() }; w.begehungen.push(b); }
+  else if (dateHint && dateHint < b.date) b.date = dateHint;
+  return b;
+}
+function upsert(ctx, wn, d) {
+  const w = ctxWingert(ctx, wn);
+  if (!(d.row >= 1) || !(d.index >= 1)) return;
+  let s = S.byKey.get(skey(wn, d.row, d.index));
+  if (!s) {
+    let id = `${wn}-R${d.row}-S${d.index}`;
+    if (S.stocks.has(id)) id = uid('s');
+    s = { id, wingert: wn, row: d.row, index: d.index, lat: NaN, lon: NaN, created: d.created || new Date().toISOString(), missing: false, ratings: {} };
+  }
+  if (Number.isFinite(d.lat) && Number.isFinite(d.lon)) { s.lat = d.lat; s.lon = d.lon; }
+  if (d.missing !== undefined) s.missing = d.missing;
+  for (const e of d.ratings) {
+    const r = cleanRating(e); if (!r) continue;
+    s.ratings[begehungByName(w, e.bname, r.at).id] = r;
+  }
+  indexStock(s); ctx.stocks.add(s);
+}
+async function commitImport(ctx) {
+  for (const w of ctx.wingerts) {
+    w.begehungen.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    if (!w.begehungen.length) w.begehungen.push(newBegehung());
+    if (ctx.newW.has(w) || !w.begehungen.some(b => b.id === w.activeBid)) w.activeBid = w.begehungen[w.begehungen.length - 1].id;
+  }
+  await tx(['stocks', 'wingerts'], t => { ctx.stocks.forEach(s => t.objectStore('stocks').put(s)); ctx.wingerts.forEach(w => t.objectStore('wingerts').put(w)); });
+}
 
-  if (!csvFiles.length){
-    setStatus('Keine CSV-Dateien im ZIP gefunden');
+async function importCsv(text, fileName, ctx) {
+  const rows = parseCSV(text);
+  if (rows.length < 2) throw new Error(`${fileName || 'Die Datei'} enthält keine Daten.`);
+  const head = rows[0].map(h => h.trim()), lc = head.map(h => h.toLowerCase());
+  const base = (fileName || '').replace(/\.csv$/i, '').trim();
+  const isoAt = v => { const d = parseDate(v); return d ? d.toISOString() : undefined; };
+
+  if (lc[0] === 'id' && lc[1] === 'row') {                      // Format der alten Version
+    let fallback = base && !/^reben_bonitur/i.test(base) ? base : null;
+    const nB = Math.floor((head.length - 6) / 5);
+    for (let i = 1; i < rows.length; i++) {
+      const c = rows[i], m = /^(.+)-R\d+-S\d+$/.exec((c[0] || '').trim());
+      let wn = m ? m[1] : fallback;
+      if (!wn) {
+        wn = await askText('Name des Wingerts', `In „${fileName || 'der Datei'}“ steht kein Wingert-Name. Wie heißt er?`, base);
+        if (!wn) throw new Error('Import abgebrochen.');
+        fallback = wn;
+      }
+      const ratings = [];
+      for (let b = 0; b < nB; b++) { const o = 6 + b * 5; ratings.push({ bname: `Begehung ${b + 1}`, wuchs: c[o], gesund: c[o + 1], reife: c[o + 2], kom: c[o + 3], at: isoAt(c[o + 4]) }); }
+      upsert(ctx, wn, { row: intOr(c[1], 0), index: intOr(c[2], 0), lat: numOr(c[3], NaN), lon: numOr(c[4], NaN), created: isoAt(c[5]), ratings });
+    }
     return;
   }
 
-  const neueBegehung = confirm(
-    `ZIP enthält ${csvFiles.length} CSV-Dateien.\n` +
-    `Als neue Begehungen anhängen?`
-  );
-
-  for (const f of csvFiles){
-    const text = await f.async('string');
-    await importCsvText(text, neueBegehung, f.name);
-  }
-
-  refreshList();
-  setStatus(`ZIP importiert (${csvFiles.length} CSVs)`);
-}
-
-async function importCsvText(text, neueBegehungOverride = null, sourceName = ''){
-  const lines = text.trim().split('\n');
-  if (lines.length < 2) return;
-  const wingertName = sourceName.replace(/\.csv$/i, '');
-wingertsSet.add(wingertName);
-refreshWingertSelect([...wingertsSet]);
-
-  let neueBegehung = neueBegehungOverride;
-  if (neueBegehung === null){
-    neueBegehung = confirm('Neue Begehung anhängen?');
-  }
-
-  for (let i=1;i<lines.length;i++){
-    if (!lines[i].trim()) continue;
-
-    const cells = lines[i].split(';').map(c => c.replace(/"/g,'').trim());
-    
-
-
-
-const stock = {
-  id: `${wingertName}-${cells[0]}`, // eindeutige ID inkl. Wingert
-  wingert: wingertName,            // CSV/ Wingert speichern
-  row: parseInt(cells[1]),
-  index: parseInt(cells[2]),
-  lat: parseFloat(cells[3]),
-  lon: parseFloat(cells[4]),
-  created: parseDate(cells[5]).toISOString(),
-  photos: [],
-  lasts: []
-};
-
-
-   
-    const baseCols = 6; // id,row,index,lat,lon,created
-const begehungCount = Math.floor((cells.length - baseCols) / 5);
-
-let offset = baseCols;
-for (let b=0; b<begehungCount; b++){
-  stock.lasts.push({
-    wuchs:  parseInt(cells[offset++]) || 0,
-    gesund: parseInt(cells[offset++]) || 0,
-    reife:  parseInt(cells[offset++]) || 0,
-    kom:    cells[offset++] || '',
-    at:     parseDate(cells[offset++]).toISOString()
+  const col = n => lc.indexOf(n);
+  const ci = { w: col('wingert'), r: col('reihe'), s: col('stock'), lat: col('lat'), lon: col('lon'), cr: col('angelegt'), miss: col('fehlstelle') };
+  if (ci.r < 0 || ci.s < 0) throw new Error(`${fileName || 'Die Datei'}: Spalten „Reihe“ und „Stock“ fehlen.`);
+  const groups = new Map();
+  head.forEach((h, idx) => {
+    const m = /^([^[]+?)\s*\[(.*)\]$/.exec(h); if (!m) return;
+    const lab = m[1].trim().toLowerCase(), k = KRITERIEN.find(k => k.label.toLowerCase() === lab || k.key === lab);
+    const key = k ? k.key : lab === 'kommentar' ? 'kom' : lab === 'datum' ? 'at' : null;
+    if (!key) return;
+    if (!groups.has(m[2])) groups.set(m[2], {});
+    groups.get(m[2])[key] = idx;
   });
-}
-
-
-    if (neueBegehung){
-      stock.lasts.push({
-        wuchs:0, gesund:0, reife:0, kom:'',
-        at:new Date().toISOString()
-      });
+  let fallback = base || null;
+  for (let i = 1; i < rows.length; i++) {
+    const c = rows[i];
+    let wn = ci.w >= 0 ? (c[ci.w] || '').trim() : '';
+    if (!wn) {
+      if (!fallback) { fallback = await askText('Name des Wingerts', 'Wie heißt der Wingert dieser Datei?', ''); if (!fallback) throw new Error('Import abgebrochen.'); }
+      wn = fallback;
     }
-
-    await putStock(stock);
-    
-    const m = L.circleMarker([stock.lat, stock.lon], { radius:6 }).addTo(markersLayer);
-m.__meta = stock;
-m.on('click', () => focusStock(m.__meta, true));
-
+    const ratings = [...groups].map(([bname, g]) => {
+      const e = { bname, at: g.at !== undefined ? isoAt(c[g.at]) : undefined, kom: g.kom !== undefined ? c[g.kom] : '' };
+      KRITERIEN.forEach(k => { if (g[k.key] !== undefined) e[k.key] = c[g[k.key]]; });
+      return e;
+    });
+    upsert(ctx, wn, {
+      row: intOr(c[ci.r], 0), index: intOr(c[ci.s], 0),
+      lat: ci.lat >= 0 ? numOr(c[ci.lat], NaN) : NaN, lon: ci.lon >= 0 ? numOr(c[ci.lon], NaN) : NaN,
+      created: ci.cr >= 0 ? isoAt(c[ci.cr]) : undefined,
+      missing: ci.miss >= 0 ? /^(ja|x|1|true|yes)$/i.test((c[ci.miss] || '').trim()) : undefined,
+      ratings,
+    });
   }
 }
-document.getElementById('csv-file').addEventListener('change', async ev => {
-  const file = ev.target.files[0];
-  if (!file) return;
 
-  if (file.name.toLowerCase().endsWith('.zip')) {
-    await importZip(file);
+async function importBackup(zip, entry) {
+  const data = JSON.parse(await entry.async('string'));
+  if (data.app !== 'reben-bonitur' || !Array.isArray(data.stocks)) throw new Error('Das ist kein Backup dieser App.');
+  const prefix = entry.name.replace(/backup\.json$/i, '');
+  const chS = new Set(), chW = new Set(), idMap = new Map(), photos = [];
+  for (const w of data.wingerts || []) {
+    const ex = S.wingerts.get(w.name);
+    if (!ex) { S.wingerts.set(w.name, w); chW.add(w); continue; }
+    for (const b of w.begehungen) if (!ex.begehungen.some(x => x.id === b.id)) ex.begehungen.push(b);
+    ex.begehungen.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    chW.add(ex);
+  }
+  for (const s of data.stocks) {
+    if (!S.wingerts.has(s.wingert)) { const w = makeWingert(s.wingert); S.wingerts.set(w.name, w); chW.add(w); }
+    const ex = S.byKey.get(skey(s.wingert, s.row, s.index));
+    if (!ex) { if (S.stocks.has(s.id)) { idMap.set(s.id, s.id = uid('s')); } indexStock(s); chS.add(s); continue; }
+    idMap.set(s.id, ex.id);
+    ex.ratings = ex.ratings || {};
+    for (const [bid, r] of Object.entries(s.ratings || {})) { const o = ex.ratings[bid]; if (!o || (r.at || '') > (o.at || '')) ex.ratings[bid] = r; }
+    ex.missing = ex.missing || !!s.missing;
+    chS.add(ex);
+  }
+  for (const p of data.photos || []) {
+    const f = zip.file(prefix + p.file); if (!f) continue;
+    const ext = (p.file.split('.').pop() || 'jpg').toLowerCase();
+    photos.push({ id: p.id, stockId: idMap.get(p.stockId) || p.stockId, bid: p.bid, at: p.at, data: `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${await f.async('base64')}` });
+  }
+  await tx(['stocks', 'wingerts', 'photos'], t => { chS.forEach(s => t.objectStore('stocks').put(s)); chW.forEach(w => t.objectStore('wingerts').put(w)); photos.forEach(p => t.objectStore('photos').put(p)); });
+  return { stocks: chS.size, wingerts: [...chW].map(w => w.name), photos: photos.length };
+}
+
+async function importFile(f) {
+  let res;
+  if (/\.zip$/i.test(f.name) || /zip/.test(f.type)) {
+    const zip = await JSZip.loadAsync(f);
+    const bj = zip.file(/(^|\/)backup\.json$/i)[0];
+    if (bj) res = await importBackup(zip, bj);
+    else {
+      const csvs = zip.file(/\.csv$/i).filter(x => !x.name.includes('__MACOSX'));
+      if (!csvs.length) throw new Error('Im ZIP liegen keine CSV-Dateien.');
+      const ctx = importCtx();
+      for (const x of csvs) await importCsv(await readText(await x.async('arraybuffer')), x.name.split('/').pop(), ctx);
+      await commitImport(ctx);
+      res = { stocks: ctx.stocks.size, wingerts: [...ctx.wingerts].map(w => w.name), photos: 0 };
+    }
   } else {
-    await importCsvText(await file.text());
+    const ctx = importCtx();
+    await importCsv(await readText(f), f.name, ctx);
+    await commitImport(ctx);
+    res = { stocks: ctx.stocks.size, wingerts: [...ctx.wingerts].map(w => w.name), photos: 0 };
   }
-
-  ev.target.value = '';
-});
-
-document.getElementById('select-wingert').addEventListener('change', (e) => {
-  currentWingert = e.target.value;
-  localStorage.setItem('lastWingert', currentWingert);
-  const lastWingert = localStorage.getItem('lastWingert');
-if (lastWingert){
-  currentWingert = lastWingert;
-  const sel = document.getElementById('select-wingert');
-  if (sel) sel.value = lastWingert;
+  S.photos = await DB.photoIndex();
+  restyleAll();
+  if (res.wingerts.length === 1) selectWingert(res.wingerts[0], true); else { refreshAll(); fitCurrent(); }
+  toast(`Importiert: ${fmtNum(res.stocks)} Stöcke in ${res.wingerts.length} ${res.wingerts.length === 1 ? 'Wingert' : 'Wingerten'}${res.photos ? `, ${res.photos} ${res.photos === 1 ? 'Foto' : 'Fotos'}` : ''}.`, 4500);
 }
 
-  refreshList();
+/* =====================================================================
+   Daten-Tab: Wingert verwalten, Speicher
+   ===================================================================== */
+async function renderData() {
+  const w = S.wingerts.get(S.current);
+  $('#exp-scope').textContent = w
+    ? `Exportiert wird „${w.name}“ mit ${w.begehungen.length === 1 ? 'seiner Begehung' : `allen ${w.begehungen.length} Begehungen`} – eine Zeile pro Stock, Trennzeichen Semikolon.`
+    : S.wingerts.size ? 'Exportiert werden alle Wingerte – als ZIP mit einer CSV je Wingert.' : 'Noch keine Daten vorhanden.';
+  $('#w-sec').hidden = !w;
+  if (w) $('#w-sec-title').textContent = `Wingert „${w.name}“`;
+  $('#opt-serp').checked = S.serp;
+  let t = `${S.wingerts.size} Wingerte, ${fmtNum(S.stocks.size)} Stöcke, ${fmtNum([...S.photos.values()].reduce((a, l) => a + l.length, 0))} Fotos. `;
+  try {
+    if (navigator.storage?.estimate) { const e = await navigator.storage.estimate(); t += `Belegt: ${fmtNum((e.usage || 0) / 1048576, 1)} MB. `; }
+    if (navigator.storage?.persisted) t += (await navigator.storage.persisted())
+      ? 'Der Browser hält die Daten dauerhaft vor.'
+      : 'Der Browser darf die Daten bei Platzmangel löschen – exportiere regelmäßig ein Backup.';
+  } catch { /* egal */ }
+  $('#storage-info').textContent = t + ' Alle Daten liegen nur auf diesem Gerät.';
+}
+async function renameWingert() {
+  const w = S.wingerts.get(S.current); if (!w) return;
+  const nn = await askText('Wingert umbenennen', 'Neuer Name', w.name);
+  if (!nn || nn === w.name) return;
+  if (S.wingerts.has(nn)) return toast(`„${nn}“ gibt es schon.`);
+  const list = stocksOf(w.name), old = w.name;
+  list.forEach(s => { S.byKey.delete(skey(s.wingert, s.row, s.index)); s.wingert = nn; S.byKey.set(skey(nn, s.row, s.index), s); });
+  S.wingerts.delete(old); w.name = nn; S.wingerts.set(nn, w);
+  await tx(['stocks', 'wingerts'], t => { list.forEach(s => t.objectStore('stocks').put(s)); t.objectStore('wingerts').delete(old); t.objectStore('wingerts').put(w); });
+  selectWingert(nn); toast(`Umbenannt in „${nn}“.`);
+}
+async function deleteWingert() {
+  const w = S.wingerts.get(S.current); if (!w) return;
+  const list = stocksOf(w.name);
+  const ok = await askConfirm(`„${w.name}“ löschen?`, `${fmtNum(list.length)} Stöcke mit allen Bewertungen und Fotos werden von diesem Gerät gelöscht. Vorher ein Backup exportieren?`, 'Endgültig löschen', true);
+  if (!ok) return;
+  await deleteStocks(list);
+  await DB.del('wingerts', w.name); S.wingerts.delete(w.name);
+  selectWingert('ALL'); toast(`„${w.name}“ gelöscht.`);
+}
+async function deleteAll() {
+  const ok = await askConfirm('Alle Daten löschen?', 'Alle Wingerte, Bewertungen und Fotos werden von diesem Gerät gelöscht.', 'Alles löschen', true);
+  if (!ok) return;
+  closeSheet();
+  await DB.clear(['stocks', 'wingerts', 'photos']);
+  S.stocks.clear(); S.byKey.clear(); S.wingerts.clear(); S.photos.clear();
+  stockLayer.clearLayers(); markers.clear();
+  selectWingert('ALL'); toast('Alle Daten gelöscht.');
+}
+
+/* =====================================================================
+   Tabs & Bedienung
+   ===================================================================== */
+function showTab(name) {
+  $$('.tabs button').forEach(b => { const on = b.dataset.tab === name; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+  $$('.tab').forEach(t => { t.hidden = t.id !== 'tab-' + name; });
+  if (name === 'gen') {
+    if (!map.hasLayer(G.layer)) G.layer.addTo(map);
+    if (!$('#g-wingert').value && S.wingerts.has(S.current)) $('#g-wingert').value = S.current;
+    updatePreview();
+  } else { setPick(null); map.removeLayer(G.layer); }
+  if (name === 'data') renderData();
+  $('#panel').scrollTop = 0;
+}
+$$('.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+$('#sel-wingert').addEventListener('change', e => selectWingert(e.target.value, true));
+$('#btn-begehung').addEventListener('click', begehungDialog);
+$('#sel-color').addEventListener('change', e => { S.colorMode = e.target.value; prefs.set('colorMode', S.colorMode); renderLegend(); restyleAll(); renderRows(); });
+$('#btn-layer').addEventListener('click', () => setBase(S.base === 'sat' ? 'osm' : 'sat'));
+$('#btn-locate').addEventListener('click', () => {
+  if (gps.watch === null) startGPS();
+  else if (!gps.follow) { gps.follow = true; updateGPSBtn(); if (S.pos) map.panTo([S.pos.lat, S.pos.lng]); }
+  else stopGPS();
+});
+$('#btn-nearest').addEventListener('click', openNearest);
+$('#btn-fit').addEventListener('click', () => { if (!fitCurrent()) toast('Hier gibt es noch keine Stöcke.'); });
+
+$('#rows').addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  const d = t.dataset;
+  if (d.w !== undefined) selectWingert(d.w, true);
+  else if (d.sid) openStock(d.sid);
+  else if (d.row) { const r = +d.row; if (S.expanded.has(r)) S.expanded.delete(r); else S.expanded.add(r); renderRows(); }
+  else if (d.fitrow) fitRow(+d.fitrow);
+  else if (d.delrow) deleteRow(+d.delrow);
+  else if (d.goto === 'gen') showTab('gen');
+  else if (d.goto === 'import') $('#file-import').click();
+});
+function jump() {
+  const r = intOr($('#j-row').value, NaN), i = intOr($('#j-stock').value, NaN);
+  if (!S.wingerts.has(S.current) || !Number.isFinite(r)) return toast('Bitte eine Reihennummer eingeben.');
+  if (Number.isFinite(i)) {
+    const s = S.byKey.get(skey(S.current, r, i));
+    if (!s) return toast(`Reihe ${r}, Stock ${i} gibt es in „${S.current}“ nicht.`);
+    openStock(s.id);
+  } else {
+    if (!rowStocks(S.current, r).length) return toast(`Reihe ${r} gibt es in „${S.current}“ nicht.`);
+    S.expanded.add(r); renderRows(); fitRow(r);
+    $(`.row-h[data-row="${r}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+}
+$('#j-go').addEventListener('click', jump);
+['#j-row', '#j-stock'].forEach(s => $(s).addEventListener('keydown', e => { if (e.key === 'Enter') jump(); }));
+
+// Bewertungs-Blatt
+$('#sheet-close').addEventListener('click', closeSheet);
+$('#sheet-next').addEventListener('click', () => go(1));
+$('#sheet-prev').addEventListener('click', () => go(-1));
+$('#sheet-flip').addEventListener('click', () => { S.walkDir *= -1; const s = S.stocks.get(cur?.id); if (s) updateNav(s); toast('Laufrichtung umgedreht.'); });
+$('#sheet-body').addEventListener('click', e => {
+  const b = e.target.closest('.seg button');
+  if (b) return setCrit(b.parentElement.dataset.k, +b.dataset.v);
+  if (e.target.closest('#s-photo')) return $('#file-photo').click();
+  const th = e.target.closest('[data-photo]'); if (th) openPhoto(th.dataset.photo);
+});
+$('#sheet-body').addEventListener('change', e => { if (e.target.id === 's-miss') setMissing(e.target.checked); });
+$('#sheet-body').addEventListener('input', e => { if (e.target.id === 's-kom') { clearTimeout(komTimer); komTimer = setTimeout(flushKom, 700); } });
+$('#sheet-body').addEventListener('focusout', e => { if (e.target.id === 's-kom') flushKom(); });
+$('#file-photo').addEventListener('change', e => { const f = e.target.files?.[0]; e.target.value = ''; addPhoto(f); });
+$('#lb-close').addEventListener('click', () => { $('#lightbox').hidden = true; });
+$('#lb-del').addEventListener('click', deletePhoto);
+document.addEventListener('keydown', e => {
+  if (!$('#lightbox').hidden && e.key === 'Escape') { $('#lightbox').hidden = true; return; }
+  if (!cur || $('#dlg').open || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); go(1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); go(-1); }
+  else if (e.key === 'Escape') closeSheet();
 });
 
+// Anlegen
+$$('[data-pick]').forEach(b => b.addEventListener('click', () => setPick(b.dataset.pick)));
+$$('[data-gps]').forEach(b => b.addEventListener('click', () => gpsGenPoint(b.dataset.gps)));
+$('#pick-cancel').addEventListener('click', () => setPick(null));
+['#g-spacing', '#g-rowsp', '#g-left', '#g-right', '#g-start', '#g-order', '#g-wingert'].forEach(id => {
+  $(id).addEventListener('input', () => { prefs.set('gen.' + id, $(id).value); schedulePreview(); });
+});
+$('#g-create').addEventListener('click', doGenerate);
+$('#g-reset').addEventListener('click', resetGen);
 
-  </script>
+// Daten
+$('#x-csv').addEventListener('click', () => exportCsv().catch(e => toast('Export fehlgeschlagen: ' + e.message, 5000)));
+$('#x-backup').addEventListener('click', () => exportBackup().catch(e => toast('Backup fehlgeschlagen: ' + e.message, 5000)));
+$('#i-file').addEventListener('click', () => $('#file-import').click());
+$('#file-import').addEventListener('change', async e => {
+  const f = e.target.files?.[0]; e.target.value = '';
+  if (!f) return;
+  toast('Wird importiert …', 10000);
+  try { await importFile(f); }
+  catch (err) { console.error(err); toast(err.message || 'Import fehlgeschlagen.', 6000); refreshAll(); }
+});
+$('#w-rename').addEventListener('click', renameWingert);
+$('#w-delete').addEventListener('click', deleteWingert);
+$('#d-all').addEventListener('click', deleteAll);
+$('#opt-serp').addEventListener('change', e => { S.serp = e.target.checked; prefs.set('serp', S.serp); const s = S.stocks.get(cur?.id); if (s) updateNav(s); });
+
+window.addEventListener('resize', () => { document.documentElement.style.setProperty('--hdr', $('#appbar').offsetHeight + 'px'); });
+map.on('moveend', () => { const c = map.getCenter(); prefs.set('view', { lat: c.lat, lng: c.lng, z: map.getZoom() }); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushKom(); });
+
+/* =====================================================================
+   Start
+   ===================================================================== */
+(async function init() {
+  setBase(S.base);
+  ['#g-spacing', '#g-rowsp', '#g-left', '#g-right', '#g-start', '#g-order'].forEach(id => { const v = prefs.get('gen.' + id, null); if (v !== null) $(id).value = v; });
+  let legacyW = null; try { legacyW = localStorage.getItem('lastWingert'); } catch { /* egal */ }
+  S.current = prefs.get('wingert', legacyW || 'ALL');
+  try { await loadAll(); }
+  catch (e) { console.error(e); toast('Die gespeicherten Daten konnten nicht geladen werden: ' + (e?.message || e), 8000); }
+  if (!S.wingerts.has(S.current)) S.current = S.wingerts.size === 1 ? [...S.wingerts.keys()][0] : 'ALL';
+
+  const v = prefs.get('view', null);
+  if (v && Number.isFinite(v.lat)) map.setView([v.lat, v.lng], v.z);
+  else if (!fitCurrent()) map.setView([49.35, 8.15], 12);
+  for (const s of S.stocks.values()) drawStock(s);
+  refreshAll();
+
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => { /* ohne sw.js läuft die App trotzdem */ });
+})();
+</script>
 </body>
 </html>
